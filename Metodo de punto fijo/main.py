@@ -1,7 +1,30 @@
 import math                        # Funciones matemáticas: sin, cos, exp, log, sqrt, etc.
+import re                           # Para preprocesar expresiones antes de pasarlas a sympy
 import matplotlib                   # Para detectar el backend gráfico activo
 import matplotlib.pyplot as plt     # Para crear y mostrar las gráficas
 import numpy as np                  # Para generar arreglos de puntos y operaciones vectoriales
+
+
+def _derivada_simbolica(expr_str):
+    """
+    Calcula la derivada simbólica exacta de expr_str respecto a x usando sympy.
+    Devuelve (función_derivada, string_derivada).
+    """
+    from sympy import symbols, diff, lambdify
+    from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
+
+    x = symbols('x')
+    # Convertir sintaxis Python/math a sintaxis sympy:
+    #   math.pi → pi, math.e (constante) → E, math.sin → sin, etc.
+    s = expr_str.replace('math.pi', 'pi')
+    s = re.sub(r'math\.e\b', 'E', s)   # solo la constante, no math.exp
+    s = re.sub(r'math\.', '', s)        # eliminar prefijo math. restante
+
+    transformations = standard_transformations + (implicit_multiplication_application,)
+    expr = parse_expr(s, transformations=transformations)
+    dg_expr = diff(expr, x)
+    dg_func = lambdify(x, dg_expr, modules='math')
+    return dg_func, str(dg_expr)
 
 
 def metodo_punto_fijo(g, x0, tolerancia=1e-3, max_iteraciones=100):
@@ -69,6 +92,7 @@ def metodo_punto_fijo(g, x0, tolerancia=1e-3, max_iteraciones=100):
 def ingresar_funcion():
     """
     Permite al usuario ingresar la función de iteración g(x).
+    La derivada g'(x) se calcula automáticamente para verificar convergencia.
     """
     # Mostrar encabezado y explicación del método
     print("\n=== MÉTODO DE PUNTO FIJO ===\n")
@@ -87,15 +111,24 @@ def ingresar_funcion():
     g_str = input("g(x) = ")
 
     # Convertir el texto en una función ejecutable usando eval
-    # eval interpreta el string como código Python en cada llamada
     try:
         g = lambda x: eval(g_str)
         # Prueba con x=1 para detectar errores de sintaxis antes de usarla
         g(1)
-        return g, g_str
     except Exception as e:
         print(f"Error al interpretar la función: {e}")
-        return None, None
+        return None, None, None, None
+
+    # Calcular la derivada g'(x) automáticamente con sympy
+    try:
+        dg, dg_str = _derivada_simbolica(g_str)
+        dg(1)  # Verificar que evalúa correctamente
+        print(f"g'(x) calculada automáticamente: {dg_str}\n")
+    except Exception as e:
+        print(f"Advertencia: no se pudo calcular g'(x) simbólicamente ({e}). Se omitirá esa columna.")
+        dg, dg_str = None, None
+
+    return g, g_str, dg, dg_str
 
 
 def graficar_resultado(g, g_str, punto_fijo, x0, historial_x):
@@ -178,8 +211,11 @@ def graficar_resultado(g, g_str, punto_fijo, x0, historial_x):
     plt.plot(punto_fijo, g_punto_fijo, 'ro', markersize=12, label='Punto fijo', zorder=6)
 
     # --- Anotación con el resultado numérico ---
+    num_iteraciones = len(historial_x) - 1
+    error_final = abs(historial_x[-1] - historial_x[-2]) if len(historial_x) >= 2 else 0
+
     bbox_props = dict(boxstyle='round,pad=0.5', facecolor='yellow', alpha=0.8, edgecolor='red', linewidth=2)
-    anotacion = f'x = {punto_fijo:.8f}\ng(x) = {g_punto_fijo:.8f}'
+    anotacion = f'x = {punto_fijo:.8f}\ng(x) = {g_punto_fijo:.8f}\nError: {error_final:.2e}\nIteraciones: {num_iteraciones}'
 
     # Calcular el desplazamiento vertical de la anotación según la escala de la gráfica
     g_visible = g_vals[~np.isnan(g_vals)]  # Ignorar los NaN para calcular el rango real
@@ -228,17 +264,25 @@ def graficar_resultado(g, g_str, punto_fijo, x0, historial_x):
         print("(No se pudo abrir la ventana de la gráfica, pero se guardó el archivo)")
 
 
-def metodo_punto_fijo_con_historial(g, x0, tolerancia=1e-3, max_iteraciones=100):
+def metodo_punto_fijo_con_historial(g, x0, tolerancia=1e-3, max_iteraciones=100, dg=None):
     """
     Versión interna del método que también devuelve el historial de iteraciones
     para poder dibujar el diagrama de telaraña en la gráfica.
+
+    Parámetro adicional:
+    - dg: derivada de g (calculada simbólicamente). Si se proporciona, se muestra
+          |g'(x_n)| en la tabla para verificar la condición de convergencia |g'(x)| < 1.
     """
     # Guardar todos los x_n visitados, empezando por el valor inicial
     historial_x = [x0]
 
-    # Encabezado de la tabla
-    print(f"\n{'Iteración':<12} {'x_n':<25} {'g(x_n)':<25} {'Error':<20}")
-    print("-" * 85)
+    # Encabezado de la tabla (con o sin columna de la derivada)
+    if dg is not None:
+        print(f"\n{'Iteración':<12} {'x_n':<25} {'g(x_n)':<25} {'|g\'(x_n)|':<20} {'Error':<20}")
+        print("-" * 105)
+    else:
+        print(f"\n{'Iteración':<12} {'x_n':<25} {'g(x_n)':<25} {'Error':<20}")
+        print("-" * 85)
 
     x_actual = x0
     iteracion = 0
@@ -256,7 +300,15 @@ def metodo_punto_fijo_con_historial(g, x0, tolerancia=1e-3, max_iteraciones=100)
         error = abs(x_siguiente - x_actual)
 
         # Imprimir la fila de esta iteración
-        print(f"{iteracion:<12} {x_actual:<25.10f} {x_siguiente:<25.10f} {error:<20.10e}")
+        if dg is not None:
+            try:
+                dgx = abs(dg(x_actual))
+                convergencia = "✓" if dgx < 1 else "✗"
+                print(f"{iteracion:<12} {x_actual:<25.10f} {x_siguiente:<25.10f} {dgx:<20.10f} {error:<20.10e} {convergencia}")
+            except Exception:
+                print(f"{iteracion:<12} {x_actual:<25.10f} {x_siguiente:<25.10f} {'N/A':<20} {error:<20.10e}")
+        else:
+            print(f"{iteracion:<12} {x_actual:<25.10f} {x_siguiente:<25.10f} {error:<20.10e}")
 
         # Agregar el nuevo punto al historial para la gráfica
         historial_x.append(x_siguiente)
@@ -283,8 +335,8 @@ def metodo_punto_fijo_con_historial(g, x0, tolerancia=1e-3, max_iteraciones=100)
 
 
 def main():
-    # Pedir al usuario que ingrese g(x) y validarla
-    g, g_str = ingresar_funcion()
+    # Pedir al usuario que ingrese g(x) y calcular g'(x) automáticamente
+    g, g_str, dg, dg_str = ingresar_funcion()
 
     # Si la función no pudo interpretarse, terminar el programa
     if g is None:
@@ -322,7 +374,7 @@ def main():
 
     # Ejecutar el método y obtener el punto fijo junto con el historial de iteraciones
     print(f"\nResolviendo: g(x) = {g_str}, con x₀ = {x0}")
-    punto_fijo, historial_x = metodo_punto_fijo_con_historial(g, x0, tolerancia, max_iteraciones)
+    punto_fijo, historial_x = metodo_punto_fijo_con_historial(g, x0, tolerancia, max_iteraciones, dg=dg)
 
     # Si se encontró solución, generar y guardar la gráfica
     if punto_fijo is not None:
