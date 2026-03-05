@@ -5,78 +5,104 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+def _normalizar_expr(s: str) -> str:
+    """Normaliza sintaxis común: ^ -> **, y deja ln(...) tal cual (se trata luego)."""
+    s = s.strip()
+    s = s.replace("^", "**")
+    return s
+
+
 def _derivada_simbolica(expr_str):
     """
-    Calcula la derivada simbólica exacta de expr_str respecto a x usando sympy.
-    Devuelve (función_derivada, string_derivada).
+    Calcula f'(x) con sympy. Devuelve (df_func, df_str).
+    Requiere: pip install sympy
     """
-    from sympy import symbols, diff, lambdify
-    from sympy.parsing.sympy_parser import (
-        parse_expr,
-        standard_transformations,
-        implicit_multiplication_application,
-    )
+    try:
+        from sympy import symbols, diff, lambdify
+        from sympy.parsing.sympy_parser import (
+            parse_expr,
+            standard_transformations,
+            implicit_multiplication_application,
+        )
+    except Exception as e:
+        raise RuntimeError(
+            "No puedo calcular la derivada porque falta 'sympy'. "
+            "Instálalo con: pip install sympy"
+        ) from e
 
     x = symbols("x")
+    s = _normalizar_expr(expr_str)
 
-    # Normalizar sintaxis común
-    s = expr_str.strip()
-    s = s.replace("^", "**")                  # permitir x^2
-    s = s.replace("ln(", "log(")              # permitir ln(x)
+    # Para sympy:
+    s = s.replace("ln(", "log(")
     s = s.replace("math.pi", "pi")
-    s = re.sub(r"math\.e\b", "E", s)          # solo la constante e
-    s = re.sub(r"math\.", "", s)              # quitar prefijo math.
+    s = re.sub(r"\bmath\.e\b", "E", s)
+    s = re.sub(r"\bpi\b", "pi", s)
+    s = re.sub(r"\be\b", "E", s)          # si el usuario escribe e
+    s = re.sub(r"\bmath\.", "", s)        # permitir sin(x) sin prefijo
 
     transformations = standard_transformations + (implicit_multiplication_application,)
     expr = parse_expr(s, transformations=transformations)
     df_expr = diff(expr, x)
 
-    # Usar módulos math + numpy para mayor compatibilidad
     df_func = lambdify(x, df_expr, modules=["math", "numpy"])
     return df_func, str(df_expr)
 
 
 def _crear_funcion_segura(f_str):
     """
-    Crea una función evaluable de forma relativamente segura para f(x).
-    Permite usar math.*, np.*, y funciones básicas.
+    Crea f(x) para eval:
+    - acepta ^, ln(x)
+    - acepta sin(x), cos(x), exp(x), log(x), sqrt(x) sin prefijo
+    - acepta pi y e
     """
-    expr = f_str.strip().replace("^", "**").replace("ln(", "math.log(")
+    expr = _normalizar_expr(f_str)
+
+    # Para eval (math):
+    expr = expr.replace("ln(", "math.log(")
 
     allowed_globals = {
         "__builtins__": {},
         "math": math,
         "np": np,
+        # funciones comunes sin prefijo
+        "sin": math.sin,
+        "cos": math.cos,
+        "tan": math.tan,
+        "exp": math.exp,
+        "log": math.log,
+        "sqrt": math.sqrt,
         "abs": abs,
         "pow": pow,
+        # constantes
+        "pi": math.pi,
+        "e": math.e,
     }
 
     def f(x):
-        allowed_locals = {"x": x}
-        return eval(expr, allowed_globals, allowed_locals)
+        return eval(expr, allowed_globals, {"x": x})
 
     return f
 
 
 def metodo_newton_raphson(f, df, x0, tolerancia=1e-3, max_iteraciones=100):
     """
-    Encuentra la raíz de una función usando el método de Newton-Raphson.
+    Newton-Raphson con ERROR RELATIVO típico (respecto a x_n):
 
-    Error mostrado en tabla:
-    - Error absoluto aproximado: |x_{n+1} - x_n|
+        error_rel = |x_{n+1} - x_n| / |x_n|
 
-    Retorna:
-    - raíz aproximada de la función
-    - historial de iteraciones (lista de x_n)
+    Si |x_n| ~ 0, cae a error absoluto.
+    Criterio de parada: SOLO error_rel < tolerancia (para que sea comparable).
     """
-
-    print(f"\n{'Iteración':<10} {'x_n':<22} {'f(x_n)':<22} {'f\\'(x_n)':<22} {'Error abs.':<22}")
+    print("\n{:<10} {:<22} {:<22} {:<22} {:<22}".format(
+        "Iteración", "x_n", "f(x_n)", "f'(x_n)", "Error rel."
+    ))
     print("-" * 110)
 
     x_actual = x0
     historial_x = [x0]
     iteracion = 0
-    error_abs = float("inf")
+    error_rel = float("inf")
 
     while iteracion < max_iteraciones:
         try:
@@ -86,89 +112,63 @@ def metodo_newton_raphson(f, df, x0, tolerancia=1e-3, max_iteraciones=100):
             print(f"\nError al evaluar en x = {x_actual}: {e}")
             return None, historial_x
 
-        # Validar valores numéricos
         if not (np.isfinite(fx) and np.isfinite(dfx)):
             print(f"\nError: f(x) o f'(x) no es finito en x = {x_actual}.")
             return None, historial_x
 
-        # Evitar división por cero
         if abs(dfx) < 1e-15:
             print(f"\nError: La derivada es cero (o muy cercana a cero) en x = {x_actual}.")
             return None, historial_x
 
-        # Fórmula de Newton-Raphson
         x_siguiente = x_actual - fx / dfx
 
-        # Error absoluto aproximado entre iteraciones
-        error_abs = abs(x_siguiente - x_actual)
+        salto = abs(x_siguiente - x_actual)
+        denom = abs(x_actual)  # relativo respecto a x_n
+        error_rel = (salto / denom) if denom > 1e-15 else salto
 
-        # Imprimir fila (el error corresponde al salto de x_n -> x_{n+1})
-        print(f"{iteracion:<10} {x_actual:<22.10f} {fx:<22.10e} {dfx:<22.10e} {error_abs:<22.10e}")
+        print("{:<10d} {:<22.10f} {:<22.10e} {:<22.10e} {:<22.10e}".format(
+            iteracion, x_actual, fx, dfx, error_rel
+        ))
 
-        # Guardar el nuevo valor
         historial_x.append(x_siguiente)
 
-        # Evaluar en el nuevo punto para criterio de parada
-        try:
+        if error_rel < tolerancia:
             fx_siguiente = f(x_siguiente)
-        except Exception:
-            fx_siguiente = float("inf")
-
-        # Criterio de parada:
-        # 1) Error absoluto pequeño, o
-        # 2) f(x_{n+1}) ya está cerca de 0
-        if error_abs < tolerancia or (np.isfinite(fx_siguiente) and abs(fx_siguiente) < tolerancia):
             print(f"\n✓ Raíz encontrada: x = {x_siguiente:.10f}")
             print(f"✓ f({x_siguiente:.10f}) = {fx_siguiente:.10e}")
-            print(f"✓ Error absoluto: {error_abs:.10e}")
+            print(f"✓ Error relativo: {error_rel:.10e}")
             print(f"✓ Iteraciones: {iteracion + 1}")
             return x_siguiente, historial_x
 
-        # Avanzar a la siguiente iteración
         x_actual = x_siguiente
         iteracion += 1
 
-    # Si no convergió dentro del máximo de iteraciones
     print(f"\nAdvertencia: Se alcanzó el número máximo de iteraciones ({max_iteraciones})")
-    try:
-        fx_final = f(x_actual)
-    except Exception:
-        fx_final = float("nan")
-
+    fx_final = f(x_actual)
     print(f"Raíz aproximada: x = {x_actual:.10f}")
     print(f"f({x_actual:.10f}) = {fx_final:.10e}")
-    print(f"Error absoluto: {error_abs:.10e}")
+    print(f"Error relativo: {error_rel:.10e}")
     print(f"Iteraciones: {max_iteraciones}")
     return x_actual, historial_x
 
 
 def ingresar_funcion():
-    """
-    Permite al usuario ingresar f(x). La derivada f'(x) se calcula automáticamente.
-    """
-    print("\n=== MÉTODO DE NEWTON-RAPHSON ===\n")
-    print("El método de Newton-Raphson encuentra raíces usando la fórmula:")
+    print("\n=== MÉTODO DE NEWTON-RAPHSON (error relativo) ===\n")
     print("  x_{n+1} = x_n - f(x_n) / f'(x_n)\n")
-    print("Ingresa la función f(x) en términos de 'x'. La derivada se calcula automáticamente.")
-    print("Puedes usar operaciones matemáticas como:")
-    print("  - Operadores: +, -, *, /, ** (potencia), ^ (también se acepta)")
-    print("  - Funciones: math.sin(), math.cos(), math.tan(), math.exp(), math.log(), math.sqrt()")
-    print("  - También: np.sin(), np.cos(), etc.")
-    print("  - Ejemplo: x**3 - 2*x - 5")
-    print("  - Ejemplo: math.cos(x) - x\n")
+    print("Puedes usar: sin(x), cos(x), exp(x), log(x), sqrt(x), pi, e, ^, ln(x)\n")
 
     f_str = input("f(x) = ").strip()
 
     try:
         f = _crear_funcion_segura(f_str)
-        f(1)  # prueba rápida
+        f(1)
     except Exception as e:
         print(f"Error al interpretar f(x): {e}")
         return None, None, None, None
 
     try:
         df, df_str = _derivada_simbolica(f_str)
-        df(1)  # prueba rápida
+        df(1)
         print(f"f'(x) calculada automáticamente: {df_str}\n")
     except Exception as e:
         print(f"Error al calcular la derivada automáticamente: {e}")
@@ -178,9 +178,6 @@ def ingresar_funcion():
 
 
 def graficar_resultado(f, f_str, df, raiz, x0, historial_x):
-    """
-    Grafica f(x), marca la raíz y muestra las tangentes de cada iteración.
-    """
     todos_x = [x for x in (historial_x + [raiz]) if x is not None and np.isfinite(x)]
     if not todos_x:
         print("No hay puntos válidos para graficar.")
@@ -188,23 +185,17 @@ def graficar_resultado(f, f_str, df, raiz, x0, historial_x):
 
     rango = max(abs(max(todos_x) - raiz), abs(min(todos_x) - raiz), 1.0)
     margen = rango * 1.4
-
     x_min = raiz - margen
     x_max = raiz + margen
 
     x_vals = np.linspace(x_min, x_max, 600)
     f_vals = []
-
     for x in x_vals:
         try:
             y = f(x)
-            if np.isfinite(y):
-                f_vals.append(y)
-            else:
-                f_vals.append(np.nan)
+            f_vals.append(y if np.isfinite(y) else np.nan)
         except Exception:
             f_vals.append(np.nan)
-
     f_vals = np.array(f_vals, dtype=float)
 
     try:
@@ -217,6 +208,7 @@ def graficar_resultado(f, f_str, df, raiz, x0, historial_x):
     plt.axhline(y=0, color="k", linestyle="--", linewidth=1, alpha=0.3)
     plt.axvline(x=raiz, color="g", linestyle="--", linewidth=1, alpha=0.3)
 
+    # Tangentes (primeras 8 iteraciones)
     iteraciones_a_mostrar = historial_x[:-1][:8]
     colores_tangente = plt.cm.Oranges(np.linspace(0.4, 0.9, max(len(iteraciones_a_mostrar), 1)))
 
@@ -224,20 +216,17 @@ def graficar_resultado(f, f_str, df, raiz, x0, historial_x):
         try:
             fx_n = f(x_n)
             dfx_n = df(x_n)
-
             if not (np.isfinite(fx_n) and np.isfinite(dfx_n)) or abs(dfx_n) < 1e-15:
                 continue
-
             tang_x = np.array([x_n - margen * 0.4, x_n + margen * 0.4])
             tang_y = fx_n + dfx_n * (tang_x - x_n)
-
             label = "Tangentes" if i == 0 else None
             plt.plot(tang_x, tang_y, "-", color=colores_tangente[i], linewidth=1.2, alpha=0.75, label=label)
             plt.plot(x_n, fx_n, "o", color=colores_tangente[i], markersize=7, zorder=4)
-            plt.plot([x_n, x_n], [0, fx_n], ":", color=colores_tangente[i], linewidth=0.8, alpha=0.5)
         except Exception:
             continue
 
+    # Punto inicial
     try:
         y0 = f(x0)
         if np.isfinite(y0):
@@ -245,21 +234,24 @@ def graficar_resultado(f, f_str, df, raiz, x0, historial_x):
     except Exception:
         pass
 
+    # Punto raíz
     if np.isfinite(f_raiz):
         plt.plot(raiz, f_raiz, "ro", markersize=12, label="Raíz encontrada", zorder=6)
 
+    # Anotación con error relativo final
     num_iteraciones = len(historial_x) - 1
-    error_final = abs(historial_x[-1] - historial_x[-2]) if len(historial_x) >= 2 else 0.0
+    if len(historial_x) >= 2:
+        salto_final = abs(historial_x[-1] - historial_x[-2])
+        denom_final = abs(historial_x[-2])
+        err_rel_final = (salto_final / denom_final) if denom_final > 1e-15 else salto_final
+    else:
+        err_rel_final = 0.0
 
     bbox_props = dict(boxstyle="round,pad=0.5", facecolor="yellow", alpha=0.8, edgecolor="red", linewidth=2)
-    anotacion = f"x = {raiz:.8f}\nf(x) = {f_raiz:.2e}\nError abs.: {error_final:.2e}\nIteraciones: {num_iteraciones}"
+    anotacion = f"x = {raiz:.8f}\nf(x) = {f_raiz:.2e}\nErr rel.: {err_rel_final:.2e}\nIteraciones: {num_iteraciones}"
 
     f_visible = f_vals[~np.isnan(f_vals)]
-    if len(f_visible) > 0:
-        y_range = max(float(f_visible.max() - f_visible.min()), 1.0)
-    else:
-        y_range = 1.0
-
+    y_range = max(float(f_visible.max() - f_visible.min()), 1.0) if len(f_visible) > 0 else 1.0
     offset_y = y_range * 0.15
 
     if np.isfinite(f_raiz):
@@ -276,17 +268,11 @@ def graficar_resultado(f, f_str, df, raiz, x0, historial_x):
     plt.grid(True, alpha=0.3)
     plt.xlabel("x", fontsize=12, fontweight="bold")
     plt.ylabel("f(x)", fontsize=12, fontweight="bold")
-    plt.title(f"Método de Newton-Raphson\nf(x) = {f_str}", fontsize=14, fontweight="bold")
+    plt.title(f"Método de Newton-Raphson (error relativo)\nf(x) = {f_str}", fontsize=14, fontweight="bold")
     plt.legend(fontsize=10, loc="best")
     plt.xlim(x_min, x_max)
 
-    if len(f_visible) > 0:
-        y_center = (f_visible.max() + f_visible.min()) / 2
-        y_half = (f_visible.max() - f_visible.min()) / 2 * 1.3 + 1
-        plt.ylim(y_center - y_half, y_center + y_half)
-
     plt.tight_layout()
-
     nombre_archivo = "grafica_newton_raphson.png"
     plt.savefig(nombre_archivo, dpi=150, bbox_inches="tight")
     print(f"Gráfica guardada como: {nombre_archivo}")
@@ -302,7 +288,6 @@ def graficar_resultado(f, f_str, df, raiz, x0, historial_x):
 
 def main():
     f, f_str, df, df_str = ingresar_funcion()
-
     if f is None:
         return
 
@@ -314,21 +299,21 @@ def main():
         return
 
     try:
-        tolerancia_str = input("\nTolerancia (presiona Enter para usar 1e-3): ").strip()
+        tolerancia_str = input("\nTolerancia (Enter para 1e-3): ").strip()
         tolerancia = float(tolerancia_str) if tolerancia_str else 1e-3
         if tolerancia <= 0:
-            raise ValueError("La tolerancia debe ser positiva")
+            raise ValueError
     except Exception:
-        print("Error en la tolerancia, usando valor por defecto 1e-3")
+        print("Error en la tolerancia, usando 1e-3")
         tolerancia = 1e-3
 
     try:
-        max_iter_str = input("Número máximo de iteraciones (presiona Enter para usar 100): ").strip()
+        max_iter_str = input("Máx. iteraciones (Enter para 100): ").strip()
         max_iteraciones = int(max_iter_str) if max_iter_str else 100
         if max_iteraciones <= 0:
-            raise ValueError("Debe ser mayor que cero")
+            raise ValueError
     except Exception:
-        print("Error en el número de iteraciones, usando valor por defecto 100")
+        print("Error en iteraciones, usando 100")
         max_iteraciones = 100
 
     print(f"\nResolviendo: f(x) = {f_str}, con x₀ = {x0}")
