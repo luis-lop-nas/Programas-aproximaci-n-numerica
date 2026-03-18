@@ -1,159 +1,120 @@
 import math
-import matplotlib.pyplot as plt
-import numpy as np
+
+
+def _crear_funcion_segura(f_str):
+    # Reemplaza ^ por ** y ln( por math.log( para compatibilidad
+    expr = f_str.strip().replace("^", "**").replace("ln(", "math.log(")
+
+    # Entorno de evaluacion controlado: solo se permiten estas funciones/constantes
+    allowed_globals = {
+        "__builtins__": {},   # bloquea funciones peligrosas de Python
+        "math": math,
+        "abs": abs,
+        "pow": pow,
+        "sin": math.sin,
+        "cos": math.cos,
+        "tan": math.tan,
+        "exp": math.exp,
+        "log": math.log,
+        "sqrt": math.sqrt,
+        "pi": math.pi,
+        "e": math.e,
+    }
+
+    # Devuelve una funcion f(x) que evalua la expresion del usuario
+    def f(x):
+        return eval(expr, allowed_globals, {"x": x})
+
+    return f
+
 
 def metodo_biseccion(funcion, a, b, tolerancia=1e-3, max_iteraciones=100):
-    """
-    Encuentra la raíz de una función usando el método de bisección
-    con criterio de parada por ERROR RELATIVO del intervalo.
-
-    error_rel = (b - a) / abs(a + b)
-    (si a+b ~ 0, usa error_abs = (b-a)/2)
-    """
-
+    # Evalua la funcion en los extremos del intervalo inicial
     fa = funcion(a)
     fb = funcion(b)
 
+    # Condicion de Bolzano: debe haber cambio de signo para garantizar una raiz
     if fa * fb > 0:
         print("Error: La función debe tener signos opuestos en los extremos del intervalo.")
         print(f"f({a}) = {fa}")
         print(f"f({b}) = {fb}")
         return None
 
-    print(f"\n{'Iteración':<12} {'a':<15} {'b':<15} {'c':<15} {'f(c)':<15} {'Err_rel':<15}")
-    print("-" * 90)
+    # Cabecera de la tabla de iteraciones
+    print(f"\n{'Iter':<6} {'a':<18} {'b':<18} {'c':<18} {'f(c)':<18} {'EN':<15}")
+    print("-" * 95)
 
     iteracion = 0
+    c_anterior = None  # guarda el punto medio de la iteracion anterior para calcular EN
 
     while iteracion < max_iteraciones:
+        # Calcula el punto medio del intervalo actual
         c = (a + b) / 2
         fc = funcion(c)
 
-        # Error relativo del intervalo (forma típica en apuntes)
-        denom = abs(a + b)
-        if denom > 1e-15:
-            error_rel = abs(b - a) / denom
+        # EN = error relativo entre el punto medio actual y el anterior
+        # En la primera iteracion no hay punto anterior, se omite
+        if c_anterior is not None and abs(c) > 1e-15:
+            EN = abs(c - c_anterior) / abs(c)
         else:
-            # Evitar división por cero si a+b ~ 0
-            error_rel = abs(b - a) / 2  # cae a error absoluto
+            EN = float('inf')
 
-        print(f"{iteracion:<12} {a:<15.8f} {b:<15.8f} {c:<15.8f} {fc:<15.8f} {error_rel:<15.8e}")
+        # Imprime la fila de esta iteracion
+        if c_anterior is None:
+            print(f"{iteracion:<6} {a:<18.10f} {b:<18.10f} {c:<18.10f} {fc:<18.10e} {'---':<15}")
+        else:
+            print(f"{iteracion:<6} {a:<18.10f} {b:<18.10f} {c:<18.10f} {fc:<18.10e} {EN:<15.8e}")
 
-        # Criterio de parada:
-        # Si quieres SOLO error relativo, elimina "abs(fc) < tolerancia"
-        if abs(fc) < tolerancia or error_rel < tolerancia:
-            print(f"\n✓ Raíz encontrada: x = {c:.10f}")
-            print(f"✓ f({c:.10f}) = {fc:.10e}")
-            print(f"✓ Error relativo: {error_rel:.10e}")
-            print(f"✓ Iteraciones: {iteracion + 1}")
+        # Criterio de parada: el error relativo ya es menor que la tolerancia
+        if c_anterior is not None and EN < tolerancia:
+            print(f"\nRaiz encontrada: x = {c:.10f}")
+            print(f"f({c:.10f}) = {fc:.10e}")
+            print(f"EN = {EN:.10e}")
+            print(f"Iteraciones: {iteracion + 1}")
             return c
 
-        # Actualizar intervalo
+        # Actualiza el intervalo conservando el subintervalo donde hay cambio de signo
         if fa * fc < 0:
+            # La raiz esta en [a, c] -> el nuevo extremo derecho es c
             b = c
             fb = fc
         else:
+            # La raiz esta en [c, b] -> el nuevo extremo izquierdo es c
             a = c
             fa = fc
 
+        c_anterior = c  # guarda el punto medio actual para la siguiente iteracion
         iteracion += 1
 
-    print(f"\nAdvertencia: Se alcanzó el número máximo de iteraciones ({max_iteraciones})")
+    # Si se agotaron las iteraciones, reporta la mejor aproximacion
+    print(f"\nAdvertencia: Se alcanzo el numero maximo de iteraciones ({max_iteraciones})")
     c = (a + b) / 2
     fc = funcion(c)
+    EN = abs(c - c_anterior) / abs(c) if c_anterior is not None and abs(c) > 1e-15 else float('inf')
 
-    denom = abs(a + b)
-    if denom > 1e-15:
-        error_rel = abs(b - a) / denom
-    else:
-        error_rel = abs(b - a) / 2
-
-    print(f"Raíz aproximada: x = {c:.10f}")
+    print(f"Raiz aproximada: x = {c:.10f}")
     print(f"f({c:.10f}) = {fc:.10e}")
-    print(f"Error relativo: {error_rel:.10e}")
+    print(f"EN = {EN:.10e}")
     return c
 
 
 def ingresar_funcion():
-    print("\n=== MÉTODO DE BISECCIÓN ===\n")
-    print("Ingresa tu función en términos de 'x'.")
-    print("Usa, por ejemplo:")
+    print("\n=== METODO DE BISECCION ===\n")
+    print("Ingresa tu funcion en terminos de 'x'. Ejemplos:")
     print("  x**3 - 2*x - 5")
-    print("  math.sin(x) - x/2")
-    print("  math.exp(x) - 3*x\n")
+    print("  sin(x) - x/2")
+    print("  exp(x) - 3*x\n")
 
     funcion_str = input("f(x) = ")
 
+    # Intenta crear la funcion y la prueba en x=0 para detectar errores de sintaxis
     try:
-        # Eval con entorno controlado (más seguro que eval libre)
-        allowed = {"math": math, "__builtins__": {}}
-        funcion = lambda x: eval(funcion_str, allowed, {"x": x})
+        funcion = _crear_funcion_segura(funcion_str)
         funcion(0)
         return funcion, funcion_str
     except Exception as e:
-        print(f"Error al interpretar la función: {e}")
+        print(f"Error al interpretar la funcion: {e}")
         return None, None
-
-
-def graficar_resultado(funcion, funcion_str, raiz, a, b):
-    margen = (b - a) * 0.3
-    x_min = a - margen
-    x_max = b + margen
-
-    x_vals = np.linspace(x_min, x_max, 500)
-    y_vals = []
-
-    for x in x_vals:
-        try:
-            y_vals.append(funcion(x))
-        except:
-            y_vals.append(np.nan)
-
-    f_raiz = funcion(raiz)
-
-    plt.figure(figsize=(12, 8))
-    plt.plot(x_vals, y_vals, 'b-', linewidth=2, label=f'f(x) = {funcion_str}')
-    plt.axhline(y=0, color='k', linestyle='--', linewidth=1, alpha=0.3)
-    plt.axvline(x=raiz, color='g', linestyle='--', linewidth=1, alpha=0.3)
-
-    plt.axvline(x=a, color='orange', linestyle=':', linewidth=1.5, alpha=0.5, label=f'Intervalo inicial [{a:.2f}, {b:.2f}]')
-    plt.axvline(x=b, color='orange', linestyle=':', linewidth=1.5, alpha=0.5)
-
-    plt.plot(raiz, f_raiz, 'ro', markersize=12, label='Raíz encontrada', zorder=5)
-
-    bbox_props = dict(boxstyle='round,pad=0.5', facecolor='yellow', alpha=0.8, edgecolor='red', linewidth=2)
-    anotacion = f'x = {raiz:.8f}\nf(x) = {f_raiz:.2e}'
-
-    y_clean = [v for v in y_vals if not np.isnan(v)]
-    y_range = (max(y_clean) - min(y_clean)) if y_clean else 1.0
-    offset_y = y_range * 0.15
-
-    plt.annotate(
-        anotacion,
-        xy=(raiz, f_raiz),
-        xytext=(raiz, f_raiz + offset_y),
-        bbox=bbox_props,
-        fontsize=11,
-        ha='center',
-        arrowprops=dict(arrowstyle='->', color='red', lw=2)
-    )
-
-    plt.grid(True, alpha=0.3)
-    plt.xlabel('x', fontsize=12, fontweight='bold')
-    plt.ylabel('f(x)', fontsize=12, fontweight='bold')
-    plt.title(f'Método de Bisección (error relativo)\nf(x) = {funcion_str}', fontsize=14, fontweight='bold')
-    plt.legend(fontsize=10, loc='best')
-    plt.xlim(x_min, x_max)
-    plt.tight_layout()
-
-    nombre_archivo = 'grafica_biseccion.png'
-    plt.savefig(nombre_archivo, dpi=150, bbox_inches='tight')
-    print(f"Gráfica guardada como: {nombre_archivo}")
-
-    try:
-        plt.show()
-    except:
-        print("(No se pudo abrir la ventana de la gráfica, pero se guardó el archivo)")
 
 
 def main():
@@ -161,7 +122,8 @@ def main():
     if funcion is None:
         return
 
-    print("\nIngresa el intervalo [a, b] donde buscar la raíz:")
+    # Pide el intervalo [a, b] donde se buscara la raiz
+    print("\nIngresa el intervalo [a, b] donde buscar la raiz:")
     try:
         a = float(input("a = "))
         b = float(input("b = "))
@@ -169,29 +131,25 @@ def main():
             print("Error: 'a' debe ser menor que 'b'")
             return
     except ValueError:
-        print("Error: Debes ingresar números válidos")
+        print("Error: Debes ingresar numeros validos")
         return
 
+    # Tolerancia: criterio de parada por error relativo
     try:
-        tolerancia_str = input("\nTolerancia (presiona Enter para usar 1e-3): ")
-        tolerancia = float(tolerancia_str) if tolerancia_str.strip() else 1e-3
+        tol_str = input("\nTolerancia (Enter para 1e-3): ")
+        tolerancia = float(tol_str) if tol_str.strip() else 1e-3
     except ValueError:
-        print("Error en la tolerancia, usando valor por defecto")
         tolerancia = 1e-3
 
+    # Limite de iteraciones para evitar bucles infinitos
     try:
-        max_iter_str = input("Número máximo de iteraciones (presiona Enter para usar 100): ")
-        max_iteraciones = int(max_iter_str) if max_iter_str.strip() else 100
+        iter_str = input("Numero maximo de iteraciones (Enter para 100): ")
+        max_iteraciones = int(iter_str) if iter_str.strip() else 100
     except ValueError:
-        print("Error en el número de iteraciones, usando valor por defecto")
         max_iteraciones = 100
 
-    print(f"\nResolviendo: f(x) = {funcion_str} en el intervalo [{a}, {b}]")
-    raiz = metodo_biseccion(funcion, a, b, tolerancia, max_iteraciones)
-
-    if raiz is not None:
-        print("\nGenerando gráfica...")
-        graficar_resultado(funcion, funcion_str, raiz, a, b)
+    print(f"\nResolviendo: f(x) = {funcion_str}  en  [{a}, {b}]")
+    metodo_biseccion(funcion, a, b, tolerancia, max_iteraciones)
 
 
 if __name__ == "__main__":
