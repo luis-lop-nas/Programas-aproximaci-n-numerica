@@ -1,71 +1,10 @@
+import sys
+import os
 import math
-import re
 
-
-def _normalizar_expr(s: str) -> str:
-    # Elimina espacios extremos y convierte ^ a ** (potencia de Python)
-    s = s.strip()
-    s = s.replace("^", "**")
-    return s
-
-
-def _derivada_simbolica(expr_str):
-    # Usa sympy para calcular f'(x) de forma simbolica a partir del string de la funcion
-    try:
-        from sympy import symbols, diff, lambdify
-        from sympy.parsing.sympy_parser import (
-            parse_expr,
-            standard_transformations,
-            implicit_multiplication_application,
-        )
-    except Exception as e:
-        raise RuntimeError("Falta sympy. Instalalo con: pip install sympy") from e
-
-    x = symbols("x")
-
-    # Adapta la expresion al formato que entiende sympy
-    s = _normalizar_expr(expr_str)
-    s = s.replace("ln(", "log(")       # sympy usa log() para logaritmo natural
-    s = s.replace("math.pi", "pi")
-    s = re.sub(r"\bmath\.e\b", "E", s)
-    s = re.sub(r"\bmath\.", "", s)      # elimina prefijos math. para que sympy los reconozca
-
-    transformations = standard_transformations + (implicit_multiplication_application,)
-    expr = parse_expr(s, transformations=transformations)
-
-    # Calcula la derivada simbolica y la convierte a funcion numerica con math
-    df_expr = diff(expr, x)
-    df_func = lambdify(x, df_expr, modules="math")
-
-    return df_func, str(df_expr)
-
-
-def _crear_funcion_segura(f_str):
-    # Reemplaza ^ por ** y ln( por math.log( para compatibilidad
-    expr = _normalizar_expr(f_str)
-    expr = expr.replace("ln(", "math.log(")
-
-    # Entorno de evaluacion controlado: solo se permiten estas funciones/constantes
-    allowed_globals = {
-        "__builtins__": {},   # bloquea funciones peligrosas de Python
-        "math": math,
-        "abs": abs,
-        "pow": pow,
-        "sin": math.sin,
-        "cos": math.cos,
-        "tan": math.tan,
-        "exp": math.exp,
-        "log": math.log,
-        "sqrt": math.sqrt,
-        "pi": math.pi,
-        "e": math.e,
-    }
-
-    # Devuelve una funcion f(x) que evalua la expresion del usuario
-    def f(x):
-        return eval(expr, allowed_globals, {"x": x})
-
-    return f
+# Importa utilidades compartidas desde la carpeta raiz del proyecto
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import crear_funcion_segura, derivada_simbolica, AYUDA_FUNCIONES
 
 
 def metodo_newton_raphson(f, df, x0, tolerancia=1e-3, max_iteraciones=100):
@@ -80,7 +19,7 @@ def metodo_newton_raphson(f, df, x0, tolerancia=1e-3, max_iteraciones=100):
     for iteracion in range(max_iteraciones):
         # Evalua f y f' en el punto actual
         try:
-            fx = f(x_actual)
+            fx  = f(x_actual)
             dfx = df(x_actual)
         except Exception as e:
             print(f"\nError al evaluar en x = {x_actual}: {e}")
@@ -131,15 +70,22 @@ def metodo_newton_raphson(f, df, x0, tolerancia=1e-3, max_iteraciones=100):
 
 def ingresar_funcion():
     print("\n=== METODO DE NEWTON-RAPHSON ===\n")
-    print("Formula:")
-    print("  x_{n+1} = x_n - f(x_n) / f'(x_n)\n")
-    print("Puedes usar: sin(x), cos(x), exp(x), log(x), sqrt(x), ln(x), pi, e, ^\n")
+    print("Formula:  x_{n+1} = x_n - f(x_n) / f'(x_n)\n")
+    print(AYUDA_FUNCIONES)
+    print("\nEjemplos:")
+    print("  x^3 - 2*x - 5")
+    print("  sin(x) - x/2")
+    print("  exp(x) - 3*x")
+    print("  sqrt(x) - cos(x)")
+    print("  ln(x) - x + 2")
+    print("  asin(x) - x^2 + 0.5")
+    print("  sin(x)*exp(-x) - sqrt(x)/3   <- combina varias funciones\n")
 
     f_str = input("f(x) = ").strip()
 
     # Intenta crear la funcion y la prueba en x=1 para detectar errores de sintaxis
     try:
-        f = _crear_funcion_segura(f_str)
+        f = crear_funcion_segura(f_str)
         f(1)
     except Exception as e:
         print(f"Error al interpretar f(x): {e}")
@@ -147,7 +93,7 @@ def ingresar_funcion():
 
     # Calcula f'(x) automaticamente con sympy y la muestra al usuario
     try:
-        df, df_str = _derivada_simbolica(f_str)
+        df, df_str = derivada_simbolica(f_str)
         df(1)
         print(f"f'(x) = {df_str}\n")
     except Exception as e:

@@ -1,31 +1,11 @@
+import sys
+import os
 import math
 
-
-def _crear_funcion_segura(f_str):
-    # Reemplaza ^ por ** y ln( por math.log( para compatibilidad
-    expr = f_str.strip().replace("^", "**").replace("ln(", "math.log(")
-
-    # Entorno de evaluacion controlado: solo se permiten estas funciones/constantes
-    allowed_globals = {
-        "__builtins__": {},   # bloquea funciones peligrosas de Python
-        "math": math,
-        "abs": abs,
-        "pow": pow,
-        "sin": math.sin,
-        "cos": math.cos,
-        "tan": math.tan,
-        "exp": math.exp,
-        "log": math.log,
-        "sqrt": math.sqrt,
-        "pi": math.pi,
-        "e": math.e,
-    }
-
-    # Devuelve una funcion f(x) que evalua la expresion del usuario
-    def f(x):
-        return eval(expr, allowed_globals, {"x": x})
-
-    return f
+# Importa utilidades compartidas desde la carpeta raiz del proyecto
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import crear_funcion_segura, buscar_cambios_de_signo, refinar_cambio, \
+                  sugerir_intervalos, AYUDA_FUNCIONES
 
 
 def metodo_biseccion(funcion, a, b, tolerancia=1e-3, max_iteraciones=100):
@@ -35,21 +15,22 @@ def metodo_biseccion(funcion, a, b, tolerancia=1e-3, max_iteraciones=100):
 
     # Condicion de Bolzano: debe haber cambio de signo para garantizar una raiz
     if fa * fb > 0:
-        print("Error: La función debe tener signos opuestos en los extremos del intervalo.")
-        print(f"f({a}) = {fa}")
-        print(f"f({b}) = {fb}")
+        print(f"\nNo hay cambio de signo en [{a}, {b}].")
+        print(f"f({a}) = {fa:.6f},  f({b}) = {fb:.6f}")
+        print("\nBuscando subintervalos validos con Bolzano...")
+        sugerir_intervalos(funcion, a, b)
         return None
 
     # Cabecera de la tabla de iteraciones
     print(f"\n{'Iter':<6} {'a':<18} {'b':<18} {'c':<18} {'f(c)':<18} {'EN':<15}")
     print("-" * 95)
 
-    iteracion = 0
+    iteracion  = 0
     c_anterior = None  # guarda el punto medio de la iteracion anterior para calcular EN
 
     while iteracion < max_iteraciones:
         # Calcula el punto medio del intervalo actual
-        c = (a + b) / 2
+        c  = (a + b) / 2
         fc = funcion(c)
 
         # EN = error relativo entre el punto medio actual y el anterior
@@ -76,11 +57,11 @@ def metodo_biseccion(funcion, a, b, tolerancia=1e-3, max_iteraciones=100):
         # Actualiza el intervalo conservando el subintervalo donde hay cambio de signo
         if fa * fc < 0:
             # La raiz esta en [a, c] -> el nuevo extremo derecho es c
-            b = c
+            b  = c
             fb = fc
         else:
             # La raiz esta en [c, b] -> el nuevo extremo izquierdo es c
-            a = c
+            a  = c
             fa = fc
 
         c_anterior = c  # guarda el punto medio actual para la siguiente iteracion
@@ -88,10 +69,9 @@ def metodo_biseccion(funcion, a, b, tolerancia=1e-3, max_iteraciones=100):
 
     # Si se agotaron las iteraciones, reporta la mejor aproximacion
     print(f"\nAdvertencia: Se alcanzo el numero maximo de iteraciones ({max_iteraciones})")
-    c = (a + b) / 2
+    c  = (a + b) / 2
     fc = funcion(c)
     EN = abs(c - c_anterior) / abs(c) if c_anterior is not None and abs(c) > 1e-15 else float('inf')
-
     print(f"Raiz aproximada: x = {c:.10f}")
     print(f"f({c:.10f}) = {fc:.10e}")
     print(f"EN = {EN:.10e}")
@@ -100,17 +80,24 @@ def metodo_biseccion(funcion, a, b, tolerancia=1e-3, max_iteraciones=100):
 
 def ingresar_funcion():
     print("\n=== METODO DE BISECCION ===\n")
-    print("Ingresa tu funcion en terminos de 'x'. Ejemplos:")
-    print("  x**3 - 2*x - 5")
+    print("Formula:  c = (a + b) / 2\n")
+    print(AYUDA_FUNCIONES)
+    print("\nEjemplos:")
+    print("  x^3 - 2*x - 5")
     print("  sin(x) - x/2")
-    print("  exp(x) - 3*x\n")
+    print("  exp(x) - 3*x")
+    print("  sqrt(x) - cos(x)")
+    print("  ln(x) - x + 2")
+    print("  asin(x) - x^2 + 0.5")
+    print("  sin(x)*exp(-x) - sqrt(x)/3   <- combina varias funciones\n")
 
-    funcion_str = input("f(x) = ")
+    funcion_str = input("f(x) = ").strip()
 
-    # Intenta crear la funcion y la prueba en x=0 para detectar errores de sintaxis
+    # Intenta crear la funcion y la prueba en x=1 para detectar errores de sintaxis
+    # (se usa x=1 en lugar de x=0 para evitar fallos con ln(x), sqrt(x), etc.)
     try:
-        funcion = _crear_funcion_segura(funcion_str)
-        funcion(0)
+        funcion = crear_funcion_segura(funcion_str)
+        funcion(1)
         return funcion, funcion_str
     except Exception as e:
         print(f"Error al interpretar la funcion: {e}")

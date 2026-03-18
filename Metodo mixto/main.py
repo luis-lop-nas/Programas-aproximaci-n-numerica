@@ -1,56 +1,16 @@
+import sys
+import os
 import math
-import re
+
+# Importa utilidades compartidas desde la carpeta raiz del proyecto
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import crear_funcion_segura, derivadas_simbolicas, \
+                  sugerir_intervalos, AYUDA_FUNCIONES
 
 
 # ─────────────────────────────────────────
-# Utilidades comunes
+# Funciones auxiliares del metodo mixto
 # ─────────────────────────────────────────
-
-def _crear_funcion_segura(f_str):
-    # Reemplaza ^ por ** y ln( por math.log( para compatibilidad
-    expr = f_str.strip().replace("^", "**").replace("ln(", "math.log(")
-
-    # Entorno de evaluacion controlado: solo se permiten estas funciones/constantes
-    allowed = {
-        "__builtins__": {}, "math": math, "abs": abs, "pow": pow,
-        "sin": math.sin, "cos": math.cos, "tan": math.tan,
-        "exp": math.exp, "log": math.log, "sqrt": math.sqrt,
-        "pi": math.pi, "e": math.e,
-    }
-    return lambda x: eval(expr, allowed, {"x": x})
-
-
-def _derivadas_simbolicas(expr_str):
-    # Usa sympy para calcular f'(x) y f''(x) de forma simbolica
-    try:
-        from sympy import symbols, diff, lambdify
-        from sympy.parsing.sympy_parser import (
-            parse_expr, standard_transformations,
-            implicit_multiplication_application,
-        )
-    except Exception as e:
-        raise RuntimeError("Falta sympy. Instalalo con: pip install sympy") from e
-
-    x = symbols("x")
-
-    # Adapta la expresion al formato que entiende sympy
-    s = expr_str.strip().replace("^", "**").replace("ln(", "log(")
-    s = s.replace("math.pi", "pi")
-    s = re.sub(r"\bmath\.e\b", "E", s)
-    s = re.sub(r"\bmath\.", "", s)
-
-    transformations = standard_transformations + (implicit_multiplication_application,)
-    expr = parse_expr(s, transformations=transformations)
-
-    # Calcula primera y segunda derivada simbolica
-    df_expr  = diff(expr, x)
-    d2f_expr = diff(df_expr, x)
-
-    # Convierte a funciones numericas usando math
-    df_func  = lambdify(x, df_expr,  modules="math")
-    d2f_func = lambdify(x, d2f_expr, modules="math")
-    return df_func, str(df_expr), d2f_func, str(d2f_expr)
-
 
 def _actualizar_bracket(f, state, x_new):
     # Intenta estrechar el intervalo [a,b] usando el nuevo punto
@@ -194,7 +154,7 @@ def paso_secante(f, state):
 
 
 def paso_punto_fijo(g, state):
-    x     = state["x"]
+    x = state["x"]
 
     # x_{n+1} = g(x_n)
     x_new = g(x)
@@ -222,8 +182,6 @@ MENU = {
 # Conjuntos que indican que recursos necesita cada metodo
 NECESITA_INTERVALO = {"1", "2"}   # requieren [a,b] con cambio de signo
 NECESITA_DERIVADA  = {"3", "4"}   # requieren f'(x), f''(x) via sympy
-NECESITA_D2        = {"4"}        # requiere ademas f''(x)
-NECESITA_SECANTE   = {"5"}        # requiere dos puntos iniciales
 NECESITA_G         = {"6"}        # requiere g(x) en lugar de f(x)
 
 
@@ -314,11 +272,20 @@ def seleccionar_metodos():
 def main():
     print("\n=== METODO MIXTO ===")
     print("Combina varios metodos de busqueda de raices alternandolos cada iteracion.\n")
+    print(AYUDA_FUNCIONES)
+    print("\nEjemplos de f(x):")
+    print("  x^3 - 2*x - 5")
+    print("  sin(x) - x/2")
+    print("  exp(x) - 3*x")
+    print("  sqrt(x) - cos(x)")
+    print("  ln(x) - x + 2")
+    print("  asin(x) - x^2 + 0.5")
+    print("  sin(x)*exp(-x) - sqrt(x)/3   <- combina varias funciones\n")
 
     # 1. Funcion f(x): base para todos los metodos excepto punto fijo
     f_str = input("f(x) = ").strip()
     try:
-        f = _crear_funcion_segura(f_str)
+        f = crear_funcion_segura(f_str)
         f(1)
     except Exception as e:
         print(f"Error al interpretar f(x): {e}")
@@ -335,7 +302,7 @@ def main():
     df = d2f = None
     if claves & NECESITA_DERIVADA:
         try:
-            df, df_str, d2f, d2f_str = _derivadas_simbolicas(f_str)
+            df, df_str, d2f, d2f_str = derivadas_simbolicas(f_str)
             df(1); d2f(1)
             print(f"\nf'(x)  = {df_str}")
             print(f"f''(x) = {d2f_str}")
@@ -349,7 +316,7 @@ def main():
         print("\nPunto fijo requiere g(x) tal que x = g(x).")
         g_str = input("g(x) = ").strip()
         try:
-            g = _crear_funcion_segura(g_str)
+            g = crear_funcion_segura(g_str)
             g(1)
         except Exception as e:
             print(f"Error al interpretar g(x): {e}")
@@ -371,9 +338,12 @@ def main():
     fa = f(a); fb = f(b)
 
     # Si se usan metodos de intervalo, verifica la condicion de Bolzano
+    # Si no hay cambio de signo, busca subintervalos validos automaticamente
     if (claves & NECESITA_INTERVALO) and fa * fb > 0:
-        print(f"Error: f(a) y f(b) deben tener signos opuestos para los metodos de intervalo.")
-        print(f"f({a}) = {fa},  f({b}) = {fb}")
+        print(f"\nNo hay cambio de signo en [{a}, {b}].")
+        print(f"f({a}) = {fa:.6f},  f({b}) = {fb:.6f}")
+        print("\nBuscando subintervalos validos con Bolzano...")
+        sugerir_intervalos(f, a, b)
         return
 
     # 6. Punto inicial x0: valor de arranque para los metodos abiertos

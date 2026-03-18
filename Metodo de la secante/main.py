@@ -1,31 +1,10 @@
+import sys
+import os
 import math
 
-
-def _crear_funcion_segura(f_str):
-    # Reemplaza ^ por ** y ln( por math.log( para compatibilidad
-    expr = f_str.strip().replace("^", "**").replace("ln(", "math.log(")
-
-    # Entorno de evaluacion controlado: solo se permiten estas funciones/constantes
-    allowed_globals = {
-        "__builtins__": {},   # bloquea funciones peligrosas de Python
-        "math": math,
-        "abs": abs,
-        "pow": pow,
-        "sin": math.sin,
-        "cos": math.cos,
-        "tan": math.tan,
-        "exp": math.exp,
-        "log": math.log,
-        "sqrt": math.sqrt,
-        "pi": math.pi,
-        "e": math.e,
-    }
-
-    # Devuelve una funcion f(x) que evalua la expresion del usuario
-    def f(x):
-        return eval(expr, allowed_globals, {"x": x})
-
-    return f
+# Importa utilidades compartidas desde la carpeta raiz del proyecto
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import crear_funcion_segura, AYUDA_FUNCIONES
 
 
 def metodo_secante(f, x0, x1, tolerancia=1e-3, max_iteraciones=100):
@@ -101,19 +80,23 @@ def metodo_secante(f, x0, x1, tolerancia=1e-3, max_iteraciones=100):
 
 def ingresar_funcion():
     print("\n=== METODO DE LA SECANTE ===\n")
-    print("Formula:")
-    print("  x_{n+1} = x_n - f(x_n) * (x_n - x_{n-1}) / (f(x_n) - f(x_{n-1}))\n")
+    print("Formula:  x_{n+1} = x_n - f(x_n)*(x_n - x_{n-1}) / (f(x_n) - f(x_{n-1}))")
     print("No requiere derivada. Necesita dos puntos iniciales x0 y x1.\n")
-    print("Ejemplos:")
-    print("  x**3 - 2*x - 5")
+    print(AYUDA_FUNCIONES)
+    print("\nEjemplos:")
+    print("  x^3 - 2*x - 5")
     print("  sin(x) - x/2")
-    print("  exp(x) - 3*x\n")
+    print("  exp(x) - 3*x")
+    print("  sqrt(x) - cos(x)")
+    print("  ln(x) - x + 2")
+    print("  asin(x) - x^2 + 0.5")
+    print("  sin(x)*exp(-x) - sqrt(x)/3   <- combina varias funciones\n")
 
     f_str = input("f(x) = ").strip()
 
     # Intenta crear la funcion y la prueba en x=1 para detectar errores de sintaxis
     try:
-        f = _crear_funcion_segura(f_str)
+        f = crear_funcion_segura(f_str)
         f(1)
         return f, f_str
     except Exception as e:
