@@ -8,7 +8,7 @@ from utils import crear_funcion_segura, buscar_cambios_de_signo, refinar_cambio,
                   sugerir_intervalos, AYUDA_FUNCIONES
 
 
-def metodo_biseccion(funcion, a, b, tolerancia=1e-3, max_iteraciones=100):
+def metodo_biseccion(funcion, a, b, tolerancia=1e-3, max_iteraciones=200):
     # Evalua la funcion en los extremos del intervalo inicial
     fa = funcion(a)
     fb = funcion(b)
@@ -130,8 +130,8 @@ def main():
 
     # Limite de iteraciones para evitar bucles infinitos
     try:
-        iter_str = input("Numero maximo de iteraciones (Enter para 100): ")
-        max_iteraciones = int(iter_str) if iter_str.strip() else 100
+        iter_str = input("Numero maximo de iteraciones (Enter para 200): ")
+        max_iteraciones = int(iter_str) if iter_str.strip() else 200
     except ValueError:
         max_iteraciones = 100
 
