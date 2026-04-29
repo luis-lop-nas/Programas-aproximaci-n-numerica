@@ -114,7 +114,46 @@ def regresion_funcion_conocida(x, y, funciones_base):
 
 
 # =============================================================================
-# 4. INTERPOLACION DE NEWTON (diferencias divididas)
+# 4. REGRESION EXPONENCIAL
+#    Modelo: y = b * exp(a*x)
+#    Linealizacion: ln(y) = ln(b) + a*x  =>  Y = B0 + B1*x
+#    con Y = ln(yi), B0 = ln(b), B1 = a
+#    Requiere yi > 0 para todos los datos.
+# =============================================================================
+
+def regresion_exponencial(x, y):
+    if np.any(y <= 0):
+        raise ValueError("Todos los valores de y deben ser estrictamente positivos para la regresion exponencial.")
+
+    # Linealizar: Y = ln(y)
+    Y = np.log(y)
+
+    # Regresion lineal sobre (x, Y)
+    n      = len(x)
+    sum_x  = np.sum(x)
+    sum_Y  = np.sum(Y)
+    sum_x2 = np.sum(x ** 2)
+    sum_xY = np.sum(x * Y)
+
+    denominador = n * sum_x2 - sum_x ** 2
+    if abs(denominador) < 1e-14:
+        raise ValueError("Denominador nulo: los valores de x son constantes o colineales.")
+
+    B1 = (n * sum_xY - sum_x * sum_Y) / denominador
+    B0 = (sum_x2 * sum_Y - sum_xY * sum_x) / denominador
+
+    a = B1
+    b = math.exp(B0)
+
+    # Error cuadratico en el espacio original
+    y_pred = b * np.exp(a * x)
+    ec = float(np.sum((y - y_pred) ** 2))
+
+    return float(a), float(b), ec
+
+
+# =============================================================================
+# 5. INTERPOLACION DE NEWTON (diferencias divididas)
 #    P_n(x) = f[x0] + f[x0,x1]*(x-x0) + f[x0,x1,x2]*(x-x0)*(x-x1) + ...
 # =============================================================================
 
@@ -161,7 +200,7 @@ def interpolacion_newton(x, y, x_eval):
 
 
 # =============================================================================
-# 5. INTERPOLACION DE LAGRANGE
+# 6. INTERPOLACION DE LAGRANGE
 #    P_n(x) = sum_i  yi * Li(x)
 #    Li(x) = prod_{j!=i} (x - xj) / (xi - xj)
 # =============================================================================
@@ -293,17 +332,18 @@ def main():
     print("  1. Regresion lineal          y = b0 + b1*x")
     print("  2. Regresion polinomial      y = b0 + b1*x + ... + bm*x^m")
     print("  3. Regresion funcion conocida  F(x) = a0*phi0(x) + a1*phi1(x) + ...")
-    print("  4. Interpolacion de Newton   (diferencias divididas)")
-    print("  5. Interpolacion de Lagrange")
+    print("  4. Regresion exponencial     y = b*exp(a*x)")
+    print("  5. Interpolacion de Newton   (diferencias divididas)")
+    print("  6. Interpolacion de Lagrange")
 
     try:
-        opcion = int(input("\nElige un metodo [1-5]: ").strip())
+        opcion = int(input("\nElige un metodo [1-6]: ").strip())
     except ValueError:
-        print("Error: Ingresa un numero entre 1 y 5.")
+        print("Error: Ingresa un numero entre 1 y 6.")
         return
 
-    if opcion not in range(1, 6):
-        print("Error: Opcion no valida. Elige entre 1 y 5.")
+    if opcion not in range(1, 7):
+        print("Error: Opcion no valida. Elige entre 1 y 6.")
         return
 
     # ── Lectura de datos comun a todos los metodos ────────────────────────
@@ -432,8 +472,33 @@ def main():
             except Exception as e:
                 print(f"  Error al evaluar: {e}")
 
-    # ── Metodo 4: Interpolacion de Newton ─────────────────────────────────
+    # ── Metodo 4: Regresion exponencial ──────────────────────────────────
     elif opcion == 4:
+        print("\n--- Regresion exponencial:  y = b * exp(a*x) ---")
+
+        try:
+            a, b, ec = regresion_exponencial(x, y)
+        except ValueError as e:
+            print(f"Error: {e}")
+            return
+
+        _imprimir_resultado(
+            "REGRESION EXPONENCIAL   y = b * exp(a*x)",
+            [("a", a), ("b", b)],
+            ec
+        )
+
+        xp_str = input("\nEvaluar en x (Enter para omitir): ").strip()
+        if xp_str:
+            try:
+                xp = float(xp_str)
+                yp = b * math.exp(a * xp)
+                print(f"  F({xp}) = {yp:.10g}")
+            except ValueError:
+                print("Error: Ingresa un numero valido.")
+
+    # ── Metodo 5: Interpolacion de Newton ─────────────────────────────────
+    elif opcion == 5:
         # Los xi deben ser todos distintos para la interpolacion
         if len(np.unique(x)) < len(x):
             print("Error: Los valores de x deben ser todos distintos para interpolacion.")
@@ -453,8 +518,8 @@ def main():
         y_eval, _, _ = interpolacion_newton(x, y, xp)
         print(f"\nResultado:  P({xp}) = {float(y_eval):.10g}")
 
-    # ── Metodo 5: Interpolacion de Lagrange ───────────────────────────────
-    elif opcion == 5:
+    # ── Metodo 6: Interpolacion de Lagrange ───────────────────────────────
+    elif opcion == 6:
         # Los xi deben ser todos distintos para la interpolacion
         if len(np.unique(x)) < len(x):
             print("Error: Los valores de x deben ser todos distintos para interpolacion.")
