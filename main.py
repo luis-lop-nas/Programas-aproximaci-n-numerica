@@ -549,20 +549,231 @@ def menu_mixto():
     _mixto_core(f, df, d2f, g, seq, st, tol, maxit)
 
 
+# ─── Polinomios con coeficientes enteros (Tema 10) ───────────────────────────
+
+def _divisores(n):
+    n = abs(n)
+    if n == 0:
+        return []
+    divs = []
+    for i in range(1, int(n**0.5) + 1):
+        if n % i == 0:
+            divs.append(i)
+            if i != n // i:
+                divs.append(n // i)
+    return sorted(divs)
+
+
+def _division_sintetica(coefs, c):
+    b = [coefs[0]]
+    for i in range(1, len(coefs)):
+        b.append(coefs[i] + c * b[-1])
+    return b[:-1], b[-1]
+
+
+def _contar_cambios_signo(coefs):
+    no_cero = [v for v in coefs if v != 0]
+    return sum(1 for i in range(len(no_cero) - 1) if no_cero[i] * no_cero[i + 1] < 0)
+
+
+def _poly_str(coefs):
+    n = len(coefs) - 1
+    partes = []
+    for i, c in enumerate(coefs):
+        exp = n - i
+        if c == 0:
+            continue
+        if exp == 0:
+            partes.append(f"{c:+g}")
+        elif exp == 1:
+            partes.append(f"{c:+g}x")
+        else:
+            partes.append(f"{c:+g}x^{exp}")
+    if not partes:
+        return "0"
+    s = " ".join(partes)
+    return s[1:] if s.startswith("+") else s
+
+
+def _horner_poly(coefs, x):
+    r = coefs[0]
+    for c in coefs[1:]:
+        r = r * x + c
+    return r
+
+
+def menu_polinomios_enteros():
+    print("\n=== RAICES DE POLINOMIOS CON COEFICIENTES ENTEROS ===\n")
+    print("Coeficientes en orden DESCENDENTE (a_n ... a_1 a_0)")
+    print("Ej. para 2x^3 + 4x^2 - 22x - 24:  2 4 -22 -24\n")
+    try:
+        coefs_orig = [int(v) for v in input("Coeficientes: ").strip().split()]
+    except Exception:
+        print("Error: introduce enteros separados por espacios."); return
+    if len(coefs_orig) < 2:
+        print("Error: minimo 2 coeficientes."); return
+    if coefs_orig[0] == 0:
+        print("Error: el coeficiente lider no puede ser cero."); return
+
+    grado_orig = len(coefs_orig) - 1
+    print(f"\nP(x) = {_poly_str(coefs_orig)}  (grado {grado_orig})")
+
+    # ── Raices nulas ──────────────────────────────────────────────────────────
+    coefs = list(coefs_orig)
+    raices_nulas = 0
+    while len(coefs) > 1 and coefs[-1] == 0:
+        raices_nulas += 1
+        coefs = coefs[:-1]
+    if raices_nulas:
+        print(f"\n  Raices nulas: x = 0  (multiplicidad {raices_nulas})")
+        print(f"  Polinomio reducido: {_poly_str(coefs)}")
+    if len(coefs) == 1:
+        print("\nPolinomio es trivial tras factorizar raices nulas."); return
+
+    # ── Regla de Descartes ────────────────────────────────────────────────────
+    print(f"\n{'─'*62}")
+    print("REGLA DE LOS SIGNOS DE DESCARTES")
+    print(f"{'─'*62}")
+    n_deg = len(coefs) - 1
+    cambios_pos = _contar_cambios_signo(coefs)
+    coefs_neg = [coefs[i] * ((-1) ** (n_deg - i)) for i in range(len(coefs))]
+    cambios_neg = _contar_cambios_signo(coefs_neg)
+
+    posibles_pos = [cambios_pos - 2 * k for k in range(cambios_pos // 2 + 1)]
+    posibles_neg = [cambios_neg - 2 * k for k in range(cambios_neg // 2 + 1)]
+
+    print(f"\n  P(x)  = {_poly_str(coefs)}")
+    print(f"  Cambios de signo: {cambios_pos}  →  raices positivas: {', '.join(map(str, posibles_pos))}")
+    print(f"\n  P(-x) = {_poly_str(coefs_neg)}")
+    print(f"  Cambios de signo: {cambios_neg}  →  raices negativas: {', '.join(map(str, posibles_neg))}")
+
+    # ── Teorema de la raiz racional ───────────────────────────────────────────
+    print(f"\n{'─'*62}")
+    print("TEOREMA DE LA RAIZ RACIONAL")
+    print(f"{'─'*62}")
+    divs_b = _divisores(coefs[-1])
+    divs_c = _divisores(coefs[0])
+    print(f"\n  a_0 = {coefs[-1]}  →  |divisores|: {divs_b}")
+    print(f"  a_n = {coefs[0]}  →  |divisores|: {divs_c}")
+
+    candidatos = set()
+    for b in divs_b:
+        for c in divs_c:
+            g = math.gcd(b, c)
+            p, q = b // g, c // g
+            candidatos.add((p, q))
+            candidatos.add((-p, q))
+    candidatos = sorted(candidatos, key=lambda x: (x[1] != 1, abs(x[0] / x[1]), x[0]))
+
+    def _frac(p, q):
+        return str(p) if q == 1 else f"{p}/{q}"
+
+    print(f"\n  Candidatos: {', '.join(_frac(p, q) for p, q in candidatos)}")
+
+    # ── Tabulacion ────────────────────────────────────────────────────────────
+    print(f"\n{'─'*62}")
+    print("TABULACION")
+    print(f"{'─'*62}")
+    print(f"\n  {'Candidato':>10}  {'P(r)':>16}  Raiz?")
+    print(f"  {'─'*36}")
+    raices_exactas = []
+    for p, q in candidatos:
+        r = p / q
+        val = _horner_poly(coefs, r)
+        es_raiz = "SI" if abs(val) < 1e-8 else ""
+        if es_raiz:
+            raices_exactas.append((p, q, r))
+        val_s = f"{val:.6g}" if abs(val) < 1e15 else "overflow"
+        print(f"  {_frac(p, q):>10}  {val_s:>16}  {es_raiz}")
+
+    # ── Division sintetica ────────────────────────────────────────────────────
+    if not raices_exactas:
+        print("\nNo se encontraron raices racionales entre los candidatos.")
+        if raices_nulas:
+            print(f"\nRaiz: x = 0  (multiplicidad {raices_nulas})")
+        return
+
+    print(f"\n{'─'*62}")
+    print("DIVISION SINTETICA")
+    print(f"{'─'*62}")
+
+    coefs_actual = list(coefs)
+    raices_encontradas = []
+
+    for p, q, r in raices_exactas:
+        if len(coefs_actual) <= 1:
+            break
+        if abs(_horner_poly(coefs_actual, r)) > 1e-8:
+            continue
+
+        print(f"\n  P(x) = {_poly_str(coefs_actual)}  ÷  (x - {_frac(p, q)})\n")
+
+        n_c = len(coefs_actual)
+        col = 10
+        print("        " + "".join(f"{c:>{col}g}" for c in coefs_actual))
+
+        cociente, resto = _division_sintetica(coefs_actual, r)
+        prods = [None] + [r * cociente[i] for i in range(n_c - 1)]
+
+        prod_str = f"  {_frac(p, q):>4} |" + "".join(
+            ("" if v is None else f"{v:>{col}g}") for v in prods
+        )
+        print(prod_str)
+        print("        " + "─" * (col * n_c))
+
+        print("        " + "".join(f"{v:>{col}g}" for v in cociente)
+              + f"  | r = {resto:g}")
+        print(f"\n  Cociente: {_poly_str(cociente)}   Resto: {resto:g}")
+
+        raices_encontradas.append(r)
+        coefs_actual = cociente
+
+    # ── Resumen ───────────────────────────────────────────────────────────────
+    print(f"\n{'═'*62}")
+    print("RESUMEN")
+    print(f"{'═'*62}")
+    if raices_nulas:
+        print(f"  x = 0  (multiplicidad {raices_nulas})")
+    for r in raices_encontradas:
+        print(f"  x = {r:g}")
+    if len(coefs_actual) > 1:
+        grado_res = len(coefs_actual) - 1
+        print(f"\n  Residual (grado {grado_res}): {_poly_str(coefs_actual)}")
+        if grado_res == 1:
+            r_lin = -coefs_actual[1] / coefs_actual[0]
+            print(f"  → raiz adicional: x = {r_lin:g}")
+            raices_encontradas.append(r_lin)
+        elif grado_res == 2:
+            a2, b2, c2 = coefs_actual
+            disc = b2**2 - 4 * a2 * c2
+            if disc >= 0:
+                r1 = (-b2 + disc**0.5) / (2 * a2)
+                r2 = (-b2 - disc**0.5) / (2 * a2)
+                print(f"  → discriminante = {disc:g}  →  x = {r1:g},  x = {r2:g}")
+            else:
+                print(f"  → discriminante = {disc:g}  →  raices complejas")
+        else:
+            print("  (puede tener raices irracionales o complejas)")
+    total = raices_nulas + len(raices_encontradas)
+    print(f"\n  Raices racionales halladas: {total} / {grado_orig}")
+    print(f"{'═'*62}")
+
+
 def menu_raices():
     opciones = {
-        "1": ("Bolzano",                  menu_bolzano),
-        "2": ("Biseccion",                menu_biseccion),
-        "3": ("Regla Falsa",              menu_regla_falsa),
-        "4": ("Punto Fijo",               menu_punto_fijo),
-        "5": ("Secante",                  menu_secante),
-        "6": ("Newton-Raphson",           menu_newton_raphson),
-        "7": ("Newton Mejorado (Halley)", menu_newton_mejorado),
-        "8": ("Metodo Mixto",             menu_mixto),
+        "1": ("Bolzano",                             menu_bolzano),
+        "2": ("Biseccion",                           menu_biseccion),
+        "3": ("Regla Falsa",                         menu_regla_falsa),
+        "4": ("Punto Fijo",                          menu_punto_fijo),
+        "5": ("Secante",                             menu_secante),
+        "6": ("Newton-Raphson",                      menu_newton_raphson),
+        "7": ("Newton Mejorado (Halley)",            menu_newton_mejorado),
+        "8": ("Metodo Mixto",                        menu_mixto),
+        "9": ("Polinomios coef. enteros (Tema 10)",  menu_polinomios_enteros),
     }
     print("\n=== RAICES DE ECUACIONES ===\n")
     for k, (v, _) in opciones.items(): print(f"  {k}. {v}")
-    op = input("\nElige [1-8]: ").strip()
+    op = input("\nElige [1-9]: ").strip()
     if op in opciones:
         opciones[op][1]()
     else:
@@ -1274,56 +1485,240 @@ def _simpson38(x, y):
     return float(3 * h0 / 8 * np.dot(pesos, y))
 
 
+# ── Helpers de integracion desde funcion ─────────────────────────────────────
+
+def _nodos_vals(f, a, b, n):
+    h = (b - a) / n
+    xs = [a + i * h for i in range(n + 1)]
+    fs = [f(x) for x in xs]
+    return h, xs, fs
+
+
+def _print_nodos(xs, fs):
+    print(f"\n  {'i':>4}  {'xi':>14}  {'f(xi)':>16}")
+    print("  " + "─" * 38)
+    for i, (xi, fi) in enumerate(zip(xs, fs)):
+        print(f"  {i:>4}  {xi:>14.8g}  {fi:>16.10g}")
+
+
+def _integ_trapecio_simple(f, a, b):
+    fa, fb = f(a), f(b)
+    res = (b - a) / 2 * (fa + fb)
+    print(f"\n  f(a) = f({a:g}) = {fa:g}")
+    print(f"  f(b) = f({b:g}) = {fb:g}")
+    print(f"\n  I ≈ (b-a)/2 · [f(a) + f(b)] = {res:.10g}")
+    return res
+
+
+def _integ_simpson13_simple(f, a, b):
+    h = (b - a) / 2
+    x1 = a + h
+    f0, f1, f2 = f(a), f(x1), f(b)
+    res = (b - a) / 6 * (f0 + 4 * f1 + f2)
+    print(f"\n  h = (b-a)/2 = {h:g}")
+    print(f"  x0={a:g}  x1={x1:g}  x2={b:g}")
+    print(f"  f0={f0:g}  f1={f1:g}  f2={f2:g}")
+    print(f"\n  I ≈ (b-a)/6 · [f0 + 4f1 + f2] = {res:.10g}")
+    return res
+
+
+def _integ_simpson38_simple(f, a, b):
+    h = (b - a) / 3
+    x1, x2 = a + h, a + 2 * h
+    f0, f1, f2, f3 = f(a), f(x1), f(x2), f(b)
+    res = 3 * h / 8 * (f0 + 3 * f1 + 3 * f2 + f3)
+    print(f"\n  h = (b-a)/3 = {h:g}")
+    print(f"  x0={a:g}  x1={x1:g}  x2={x2:g}  x3={b:g}")
+    print(f"  f0={f0:g}  f1={f1:g}  f2={f2:g}  f3={f3:g}")
+    print(f"\n  I ≈ 3h/8 · [f0 + 3f1 + 3f2 + f3] = {res:.10g}")
+    return res
+
+
+def _integ_trapecio_comp_f(f, a, b, n):
+    h, xs, fs = _nodos_vals(f, a, b, n)
+    _print_nodos(xs, fs)
+    pesos = [2.0] * (n + 1); pesos[0] = pesos[-1] = 1.0
+    suma = sum(p * fi for p, fi in zip(pesos, fs))
+    res = h / 2 * suma
+    print(f"\n  I ≈ h/2 · [f0 + 2f1 + ... + 2f_{{n-1}} + fn]")
+    print(f"    h={h:g}   suma_ponderada={suma:g}   I={res:.10g}")
+    return res
+
+
+def _integ_simpson13_comp_f(f, a, b, n):
+    if n % 2 != 0:
+        raise ValueError(f"n={n} debe ser par.")
+    h, xs, fs = _nodos_vals(f, a, b, n)
+    _print_nodos(xs, fs)
+    pesos = [1.0] * (n + 1)
+    for i in range(1, n):
+        pesos[i] = 4.0 if i % 2 != 0 else 2.0
+    suma = sum(p * fi for p, fi in zip(pesos, fs))
+    res = h / 3 * suma
+    print(f"\n  I ≈ h/3 · [f0 + 4f1 + 2f2 + 4f3 + ... + fn]")
+    print(f"    h={h:g}   suma_ponderada={suma:g}   I={res:.10g}")
+    return res
+
+
+def _integ_simpson38_comp_f(f, a, b, n):
+    if n % 3 != 0:
+        raise ValueError(f"n={n} debe ser multiplo de 3.")
+    h, xs, fs = _nodos_vals(f, a, b, n)
+    _print_nodos(xs, fs)
+    pesos = [1.0] * (n + 1)
+    for i in range(1, n):
+        pesos[i] = 2.0 if i % 3 == 0 else 3.0
+    suma = sum(p * fi for p, fi in zip(pesos, fs))
+    res = 3 * h / 8 * suma
+    print(f"\n  I ≈ 3h/8 · [f0 + 3f1 + 3f2 + 2f3 + ... + fn]")
+    print(f"    h={h:g}   suma_ponderada={suma:g}   I={res:.10g}")
+    return res
+
+
+def _integ_punto_medio(f, a, b):
+    xm = (a + b) / 2
+    fm = f(xm)
+    res = (b - a) * fm
+    print(f"\n  x_m = (a+b)/2 = {xm:g}")
+    print(f"  f(x_m) = {fm:g}")
+    print(f"\n  I ≈ (b-a) · f((a+b)/2) = {res:.10g}")
+    return res
+
+
+def _integ_dos_puntos(f, a, b):
+    h = (b - a) / 3
+    x1, x2 = a + h, a + 2 * h
+    f1, f2 = f(x1), f(x2)
+    res = 3 * h / 2 * (f1 + f2)
+    print(f"\n  h = (b-a)/3 = {h:g}")
+    print(f"  x1={x1:g}  x2={x2:g}")
+    print(f"  f(x1)={f1:g}  f(x2)={f2:g}")
+    print(f"\n  I ≈ 3h/2 · [f(x1) + f(x2)] = {res:.10g}")
+    return res
+
+
+_INTEG_COMP = {"4", "5", "6"}
+
+_INTEG_OPS = {
+    "1": "Trapecio simple            [cerrada, 2 pts]",
+    "2": "Simpson 1/3 simple         [cerrada, 3 pts]",
+    "3": "Simpson 3/8 simple         [cerrada, 4 pts]",
+    "4": "Trapecio compuesto         [cerrada, n+1 pts]",
+    "5": "Simpson 1/3 compuesto      [cerrada, n par]",
+    "6": "Simpson 3/8 compuesto      [cerrada, n mult. 3]",
+    "7": "Punto medio                [abierta, 1 pt interior]",
+    "8": "Dos puntos                 [abierta, 2 pts interiores]",
+    "9": "Desde datos tabulados      [Trapecio / S1/3 / S3/8]",
+}
+
+
 def _modulo_integracion():
-    print("\n=== INTEGRACION NUMERICA ===\n")
-    print("  1. Trapecio compuesto          (h variable permitido)")
-    print("  2. Simpson 1/3 compuesto       (n par, h constante)")
-    print("  3. Simpson 3/8 compuesto       (n multiplo de 3, h constante)")
-    try:
-        sub = int(input("\nElige [1-3]: ").strip())
-    except Exception:
-        print("Opcion invalida"); return
-    if sub not in (1, 2, 3):
+    print("\n=== INTEGRACION NUMERICA (Newton-Cotes) ===\n")
+    print("  Formulas cerradas — simples:")
+    for k in ("1", "2", "3"):
+        print(f"    {k}. {_INTEG_OPS[k]}")
+    print("  Formulas cerradas — compuestas (desde f(x)):")
+    for k in ("4", "5", "6"):
+        print(f"    {k}. {_INTEG_OPS[k]}")
+    print("  Formulas abiertas:")
+    for k in ("7", "8"):
+        print(f"    {k}. {_INTEG_OPS[k]}")
+    print("  Datos tabulados:")
+    print(f"    9. {_INTEG_OPS['9']}")
+
+    op = input("\nElige [1-9]: ").strip()
+    if op not in _INTEG_OPS:
         print("Opcion invalida"); return
 
-    print("\nIngresa los puntos tabulares.\n")
+    # ── Modo datos tabulados ────────────────────────────────────────────────
+    if op == "9":
+        print("\n  1. Trapecio compuesto  (h variable)")
+        print("  2. Simpson 1/3         (n par, h cte)")
+        print("  3. Simpson 3/8         (n mult.3, h cte)")
+        try:
+            sub = int(input("  Metodo [1-3]: ").strip())
+        except Exception:
+            print("Opcion invalida"); return
+        if sub not in (1, 2, 3):
+            print("Opcion invalida"); return
+        print("\nIngresa los puntos tabulares.")
+        try:
+            x = _leer_arr("x"); y = _leer_arr("y")
+        except ValueError as e:
+            print(e); return
+        if x.size != y.size:
+            print("Error: x e y deben tener igual longitud."); return
+        if x.size < 2:
+            print("Error: minimo 2 puntos."); return
+        orden = np.argsort(x); x = x[orden]; y = y[orden]
+        if np.any(np.isclose(np.diff(x), 0, atol=_TOL_NUM, rtol=0)):
+            print("Error: xi deben ser distintos."); return
+        n_sub = len(x) - 1
+        print(f"\n{n_sub} subintervalos  a={x[0]:.6g}  b={x[-1]:.6g}")
+        try:
+            if sub == 1:
+                r = _trapecio(x, y)
+                print(f"\nTrapecio:    I ≈ {r:.10g}")
+            elif sub == 2:
+                r = _simpson13(x, y)
+                print(f"\nSimpson 1/3: I ≈ {r:.10g}")
+            else:
+                r = _simpson38(x, y)
+                print(f"\nSimpson 3/8: I ≈ {r:.10g}")
+        except ValueError as e:
+            print(f"Error: {e}")
+        return
+
+    # ── Modo desde funcion ──────────────────────────────────────────────────
+    f, f_str = _pedir_funcion()
+    if f is None: return
+    print("\nIntervalo [a, b]:")
+    a, b = _pedir_intervalo()
+    if a is None: return
+
+    n = None
+    if op in _INTEG_COMP:
+        try:
+            n_s = input("Numero de subintervalos n: ").strip()
+            n = int(n_s)
+            if n < 1: raise ValueError
+        except Exception:
+            print("Error: n debe ser entero positivo."); return
+
+    print(f"\nIntegrando f(x) = {f_str}  en  [{a:g}, {b:g}]")
     try:
-        x = _leer_arr("x"); y = _leer_arr("y")
+        if   op == "1": res = _integ_trapecio_simple(f, a, b)
+        elif op == "2": res = _integ_simpson13_simple(f, a, b)
+        elif op == "3": res = _integ_simpson38_simple(f, a, b)
+        elif op == "4": res = _integ_trapecio_comp_f(f, a, b, n)
+        elif op == "5": res = _integ_simpson13_comp_f(f, a, b, n)
+        elif op == "6": res = _integ_simpson38_comp_f(f, a, b, n)
+        elif op == "7": res = _integ_punto_medio(f, a, b)
+        elif op == "8": res = _integ_dos_puntos(f, a, b)
     except ValueError as e:
-        print(e); return
-    if x.size != y.size:
-        print("Error: x e y deben tener igual longitud."); return
-    if x.size < 2:
-        print("Error: minimo 2 puntos."); return
-    orden = np.argsort(x); x = x[orden]; y = y[orden]
-    if np.any(np.isclose(np.diff(x), 0, atol=_TOL_NUM, rtol=0)):
-        print("Error: xi deben ser distintos."); return
+        print(f"Error: {e}"); return
 
-    n_sub = len(x) - 1
-    print(f"\n{n_sub} subintervalos, {len(x)} puntos.  a={x[0]:.6g}  b={x[-1]:.6g}")
+    print(f"\n{'═'*52}")
+    print(f"  RESULTADO: I ≈ {res:.10g}")
+    print(f"{'═'*52}")
 
-    if sub == 1:
-        r = _trapecio(x, y)
-        print(f"\nRegla del Trapecio:  integral ≈ {r:.10g}")
-    elif sub == 2:
+    exact_s = input("\nValor exacto (Enter para omitir): ").strip()
+    if exact_s:
         try:
-            r = _simpson13(x, y)
-            print(f"\nSimpson 1/3:  integral ≈ {r:.10g}")
-        except ValueError as e:
-            print(f"Error: {e}")
-    elif sub == 3:
-        try:
-            r = _simpson38(x, y)
-            print(f"\nSimpson 3/8:  integral ≈ {r:.10g}")
-        except ValueError as e:
-            print(f"Error: {e}")
+            exact = float(exact_s)
+            err_abs = abs(res - exact)
+            err_rel = err_abs / abs(exact) * 100 if abs(exact) > 1e-15 else float("nan")
+            print(f"  Error absoluto: {err_abs:.6e}")
+            print(f"  Error relativo: {err_rel:.4f}%")
+        except Exception:
+            pass
 
 
 def menu_derivacion_integracion():
     print("\n=== DERIVACION E INTEGRACION NUMERICA (TEMA 4) ===\n")
     print("  1. Derivacion desde puntos  (1a, 2a, 3a, 4a derivada)")
     print("  2. Derivacion desde polinomio ingresado")
-    print("  3. Integracion numerica     (Trapecio, Simpson 1/3, Simpson 3/8)")
+    print("  3. Integracion numerica     (Newton-Cotes: simples, compuestas, abiertas)")
     try:
         op = int(input("\nElige [1-3]: ").strip())
     except Exception:
