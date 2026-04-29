@@ -771,13 +771,20 @@ def menu_raices():
         "8": ("Metodo Mixto",                        menu_mixto),
         "9": ("Polinomios coef. enteros (Tema 10)",  menu_polinomios_enteros),
     }
-    print("\n=== RAICES DE ECUACIONES ===\n")
-    for k, (v, _) in opciones.items(): print(f"  {k}. {v}")
-    op = input("\nElige [1-9]: ").strip()
-    if op in opciones:
-        opciones[op][1]()
-    else:
-        print("Opcion invalida.")
+    while True:
+        print("\n=== RAICES DE ECUACIONES ===\n")
+        for k, (v, _) in opciones.items(): print(f"  {k}. {v}")
+        print("  0. Volver al menu principal")
+        try:
+            op = input("\nElige [0-9]: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            break
+        if op == "0":
+            break
+        elif op in opciones:
+            opciones[op][1]()
+        else:
+            print("Opcion invalida.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -922,152 +929,161 @@ def _eval_poli(coefs, xp):
 
 
 def menu_interp_aprox():
-    print("\n=== INTERPOLACION Y APROXIMACION (TEMA 3) ===\n")
-    print("  1. Regresion lineal            y = b0 + b1*x")
-    print("  2. Regresion polinomial        y = b0 + b1*x + ... + bm*x^m")
-    print("  3. Regresion funcion conocida  F(x) = a0*phi0(x) + ...")
-    print("  4. Regresion exponencial       y = b*exp(a*x)")
-    print("  5. Regresion multiple 3D       z = b0 + b1*x + b2*y")
-    print("  6. Interpolacion de Newton     (diferencias divididas)")
-    print("  7. Interpolacion de Lagrange")
-    try:
-        op = int(input("\nElige [1-7]: ").strip())
-    except Exception:
-        print("Opcion invalida"); return
-    if op not in range(1, 8):
-        print("Opcion invalida"); return
-
-    if op == 5:
-        print("\nIngresa los puntos (x, y, z). Minimo 3 puntos.\n")
+    while True:
+        print("\n=== INTERPOLACION Y APROXIMACION (TEMA 3) ===\n")
+        print("  1. Regresion lineal            y = b0 + b1*x")
+        print("  2. Regresion polinomial        y = b0 + b1*x + ... + bm*x^m")
+        print("  3. Regresion funcion conocida  F(x) = a0*phi0(x) + ...")
+        print("  4. Regresion exponencial       y = b*exp(a*x)")
+        print("  5. Regresion multiple 3D       z = b0 + b1*x + b2*y")
+        print("  6. Interpolacion de Newton     (diferencias divididas)")
+        print("  7. Interpolacion de Lagrange")
+        print("  0. Volver al menu principal")
         try:
-            xv = np.array([float(v) for v in input("x = ").strip().split()])
-            yv = np.array([float(v) for v in input("y = ").strip().split()])
-            zv = np.array([float(v) for v in input("z = ").strip().split()])
+            op_s = input("\nElige [0-7]: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            break
+        if op_s == "0":
+            break
+        try:
+            op = int(op_s)
         except Exception:
-            print("Error: solo numeros."); return
-        if not (len(xv) == len(yv) == len(zv)):
-            print("Error: x, y, z deben tener la misma longitud."); return
-        if len(xv) < 3:
-            print("Error: minimo 3 puntos."); return
-        try:
-            coefs, ec = regresion_multiple(xv, yv, zv)
-        except Exception as e:
-            print(f"Error: {e}"); return
-        _print_resultado(
-            "REGRESION MULTIPLE 3D\n  z = b0 + b1*x + b2*y",
-            [("b0", coefs[0]), ("b1", coefs[1]), ("b2", coefs[2])], ec
-        )
-        ev = input("\nEvaluar en (x y) (Enter para omitir): ").strip()
-        if ev:
+            print("Opcion invalida"); continue
+        if op not in range(1, 8):
+            print("Opcion invalida"); continue
+
+        if op == 5:
+            print("\nIngresa los puntos (x, y, z). Minimo 3 puntos.\n")
             try:
-                xp, yp = [float(v) for v in ev.split()]
-                print(f"  F({xp}, {yp}) = {coefs[0]+coefs[1]*xp+coefs[2]*yp:.10g}")
+                xv = np.array([float(v) for v in input("x = ").strip().split()])
+                yv = np.array([float(v) for v in input("y = ").strip().split()])
+                zv = np.array([float(v) for v in input("z = ").strip().split()])
             except Exception:
-                print("Error: ingresa dos numeros separados por espacio.")
-        return
-
-    x, y = _ingresar_datos_xy()
-    if x is None: return
-    print("\nPuntos ingresados:")
-    _print_tabla_xy(x, y)
-
-    if op == 1:
-        print("\n--- Regresion lineal ---")
-        try:
-            b0, b1, ec = regresion_lineal(x, y)
-        except ValueError as e:
-            print(f"Error: {e}"); return
-        _print_resultado("REGRESION LINEAL   y = b0 + b1*x", [("b0", b0), ("b1", b1)], ec)
-        ev = input("\nEvaluar en x (Enter para omitir): ").strip()
-        if ev:
-            try: xp = float(ev); print(f"  F({xp}) = {b0+b1*xp:.10g}")
-            except Exception: print("Error: numero invalido.")
-
-    elif op == 2:
-        print("\n--- Regresion polinomial ---")
-        try:
-            m = int(input("Grado m = ").strip())
-        except Exception:
-            print("Error: entero invalido"); return
-        try:
-            coefs, ec = regresion_polinomial(x, y, m)
-        except ValueError as e:
-            print(f"Error: {e}"); return
-        _print_resultado(f"REGRESION POLINOMIAL  grado {m}",
-                         [(f"b{k}", coefs[k]) for k in range(len(coefs))], ec)
-        ev = input("\nEvaluar en x (Enter para omitir): ").strip()
-        if ev:
+                print("Error: solo numeros."); continue
+            if not (len(xv) == len(yv) == len(zv)):
+                print("Error: x, y, z deben tener la misma longitud."); continue
+            if len(xv) < 3:
+                print("Error: minimo 3 puntos."); continue
             try:
-                xp = float(ev); print(f"  P({xp}) = {float(_eval_poli(coefs, xp)):.10g}")
-            except Exception: print("Error: numero invalido.")
-
-    elif op == 3:
-        print("\n--- Regresion funcion conocida ---")
-        print(AYUDA_FUNCIONES)
-        print("\nEjemplos de funciones base: 1  |  x  |  x^2  |  sin(x)  |  exp(x)\n")
-        try:
-            r = int(input("Numero de funciones base r = ").strip())
-            if r < 1: raise ValueError
-        except Exception:
-            print("Error: entero >= 1"); return
-        funcs = []; nombres = []
-        for k in range(r):
-            phi_s = input(f"phi{k}(x) = ").strip()
-            try:
-                phi_e = crear_funcion_segura(phi_s); phi_e(1)
-                phi_n = np.vectorize(phi_e); phi_n(np.array([1.0]))
+                coefs, ec = regresion_multiple(xv, yv, zv)
             except Exception as e:
-                print(f"Error phi{k}: {e}"); return
-            funcs.append(phi_n); nombres.append(phi_s)
-        try:
-            coefs, ec = regresion_funcion_conocida(x, y, funcs)
-        except ValueError as e:
-            print(f"Error: {e}"); return
-        modelo = " + ".join(f"a{k}*({nb})" for k, nb in enumerate(nombres))
-        _print_resultado(f"REGRESION FUNCION CONOCIDA\n  F(x) = {modelo}",
-                         [(f"a{k}", coefs[k]) for k in range(len(coefs))], ec)
-        ev = input("\nEvaluar en x (Enter para omitir): ").strip()
-        if ev:
+                print(f"Error: {e}"); continue
+            _print_resultado(
+                "REGRESION MULTIPLE 3D\n  z = b0 + b1*x + b2*y",
+                [("b0", coefs[0]), ("b1", coefs[1]), ("b2", coefs[2])], ec
+            )
+            ev = input("\nEvaluar en (x y) (Enter para omitir): ").strip()
+            if ev:
+                try:
+                    xp, yp = [float(v) for v in ev.split()]
+                    print(f"  F({xp}, {yp}) = {coefs[0]+coefs[1]*xp+coefs[2]*yp:.10g}")
+                except Exception:
+                    print("Error: ingresa dos numeros separados por espacio.")
+            continue
+
+        x, y = _ingresar_datos_xy()
+        if x is None: continue
+        print("\nPuntos ingresados:")
+        _print_tabla_xy(x, y)
+
+        if op == 1:
+            print("\n--- Regresion lineal ---")
             try:
-                xp = float(ev); xa = np.array([xp])
-                yp = sum(c * phi(xa) for c, phi in zip(coefs, funcs))
-                print(f"  F({xp}) = {np.asarray(yp).ravel()[0]:.10g}")
-            except Exception as e: print(f"Error: {e}")
+                b0, b1, ec = regresion_lineal(x, y)
+            except ValueError as e:
+                print(f"Error: {e}"); continue
+            _print_resultado("REGRESION LINEAL   y = b0 + b1*x", [("b0", b0), ("b1", b1)], ec)
+            ev = input("\nEvaluar en x (Enter para omitir): ").strip()
+            if ev:
+                try: xp = float(ev); print(f"  F({xp}) = {b0+b1*xp:.10g}")
+                except Exception: print("Error: numero invalido.")
 
-    elif op == 4:
-        print("\n--- Regresion exponencial ---")
-        try:
-            a, b_e, ec = regresion_exponencial(x, y)
-        except ValueError as e:
-            print(f"Error: {e}"); return
-        _print_resultado("REGRESION EXPONENCIAL   y = b*exp(a*x)", [("a", a), ("b", b_e)], ec)
-        ev = input("\nEvaluar en x (Enter para omitir): ").strip()
-        if ev:
-            try: xp = float(ev); print(f"  F({xp}) = {b_e*math.exp(a*xp):.10g}")
-            except Exception: print("Error: numero invalido.")
+        elif op == 2:
+            print("\n--- Regresion polinomial ---")
+            try:
+                m = int(input("Grado m = ").strip())
+            except Exception:
+                print("Error: entero invalido"); continue
+            try:
+                coefs, ec = regresion_polinomial(x, y, m)
+            except ValueError as e:
+                print(f"Error: {e}"); continue
+            _print_resultado(f"REGRESION POLINOMIAL  grado {m}",
+                             [(f"b{k}", coefs[k]) for k in range(len(coefs))], ec)
+            ev = input("\nEvaluar en x (Enter para omitir): ").strip()
+            if ev:
+                try:
+                    xp = float(ev); print(f"  P({xp}) = {float(_eval_poli(coefs, xp)):.10g}")
+                except Exception: print("Error: numero invalido.")
 
-    elif op == 6:
-        if len(np.unique(x)) < len(x):
-            print("Error: xi deben ser distintos para interpolacion."); return
-        print("\n--- Interpolacion de Newton (diferencias divididas) ---")
-        _print_tabla_dif(x, y)
-        try:
-            xp = float(input("\nEvaluar en x = ").strip())
-        except Exception:
-            print("Error: numero invalido."); return
-        y_e, _, _ = interpolacion_newton(x, y, xp)
-        print(f"\nP({xp}) = {float(y_e):.10g}")
+        elif op == 3:
+            print("\n--- Regresion funcion conocida ---")
+            print(AYUDA_FUNCIONES)
+            print("\nEjemplos de funciones base: 1  |  x  |  x^2  |  sin(x)  |  exp(x)\n")
+            try:
+                r = int(input("Numero de funciones base r = ").strip())
+                if r < 1: raise ValueError
+            except Exception:
+                print("Error: entero >= 1"); continue
+            funcs = []; nombres = []
+            for k in range(r):
+                phi_s = input(f"phi{k}(x) = ").strip()
+                try:
+                    phi_e = crear_funcion_segura(phi_s); phi_e(1)
+                    phi_n = np.vectorize(phi_e); phi_n(np.array([1.0]))
+                except Exception as e:
+                    print(f"Error phi{k}: {e}"); break
+                funcs.append(phi_n); nombres.append(phi_s)
+            else:
+                try:
+                    coefs, ec = regresion_funcion_conocida(x, y, funcs)
+                except ValueError as e:
+                    print(f"Error: {e}"); continue
+                modelo = " + ".join(f"a{k}*({nb})" for k, nb in enumerate(nombres))
+                _print_resultado(f"REGRESION FUNCION CONOCIDA\n  F(x) = {modelo}",
+                                 [(f"a{k}", coefs[k]) for k in range(len(coefs))], ec)
+                ev = input("\nEvaluar en x (Enter para omitir): ").strip()
+                if ev:
+                    try:
+                        xp = float(ev); xa = np.array([xp])
+                        yp = sum(c * phi(xa) for c, phi in zip(coefs, funcs))
+                        print(f"  F({xp}) = {np.asarray(yp).ravel()[0]:.10g}")
+                    except Exception as e: print(f"Error: {e}")
 
-    elif op == 7:
-        if len(np.unique(x)) < len(x):
-            print("Error: xi deben ser distintos para interpolacion."); return
-        print("\n--- Interpolacion de Lagrange ---")
-        try:
-            xp = float(input("Evaluar en x = ").strip())
-        except Exception:
-            print("Error: numero invalido."); return
-        y_e = interpolacion_lagrange(x, y, xp)
-        print(f"\nP({xp}) = {float(y_e):.10g}")
+        elif op == 4:
+            print("\n--- Regresion exponencial ---")
+            try:
+                a, b_e, ec = regresion_exponencial(x, y)
+            except ValueError as e:
+                print(f"Error: {e}"); continue
+            _print_resultado("REGRESION EXPONENCIAL   y = b*exp(a*x)", [("a", a), ("b", b_e)], ec)
+            ev = input("\nEvaluar en x (Enter para omitir): ").strip()
+            if ev:
+                try: xp = float(ev); print(f"  F({xp}) = {b_e*math.exp(a*xp):.10g}")
+                except Exception: print("Error: numero invalido.")
+
+        elif op == 6:
+            if len(np.unique(x)) < len(x):
+                print("Error: xi deben ser distintos para interpolacion."); continue
+            print("\n--- Interpolacion de Newton (diferencias divididas) ---")
+            _print_tabla_dif(x, y)
+            try:
+                xp = float(input("\nEvaluar en x = ").strip())
+            except Exception:
+                print("Error: numero invalido."); continue
+            y_e, _, _ = interpolacion_newton(x, y, xp)
+            print(f"\nP({xp}) = {float(y_e):.10g}")
+
+        elif op == 7:
+            if len(np.unique(x)) < len(x):
+                print("Error: xi deben ser distintos para interpolacion."); continue
+            print("\n--- Interpolacion de Lagrange ---")
+            try:
+                xp = float(input("Evaluar en x = ").strip())
+            except Exception:
+                print("Error: numero invalido."); continue
+            y_e = interpolacion_lagrange(x, y, xp)
+            print(f"\nP({xp}) = {float(y_e):.10g}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1715,18 +1731,26 @@ def _modulo_integracion():
 
 
 def menu_derivacion_integracion():
-    print("\n=== DERIVACION E INTEGRACION NUMERICA (TEMA 4) ===\n")
-    print("  1. Derivacion desde puntos  (1a, 2a, 3a, 4a derivada)")
-    print("  2. Derivacion desde polinomio ingresado")
-    print("  3. Integracion numerica     (Newton-Cotes: simples, compuestas, abiertas)")
-    try:
-        op = int(input("\nElige [1-3]: ").strip())
-    except Exception:
-        print("Opcion invalida"); return
-    if op == 1:   _modulo_derivacion_puntos()
-    elif op == 2: _modulo_polinomio()
-    elif op == 3: _modulo_integracion()
-    else:         print("Opcion invalida")
+    while True:
+        print("\n=== DERIVACION E INTEGRACION NUMERICA (TEMA 4) ===\n")
+        print("  1. Derivacion desde puntos  (1a, 2a, 3a, 4a derivada)")
+        print("  2. Derivacion desde polinomio ingresado")
+        print("  3. Integracion numerica     (Newton-Cotes: simples, compuestas, abiertas)")
+        print("  0. Volver al menu principal")
+        try:
+            op = input("\nElige [0-3]: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            break
+        if op == "0":
+            break
+        try:
+            op = int(op)
+        except Exception:
+            print("Opcion invalida"); continue
+        if op == 1:   _modulo_derivacion_puntos()
+        elif op == 2: _modulo_polinomio()
+        elif op == 3: _modulo_integracion()
+        else:         print("Opcion invalida")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1849,27 +1873,35 @@ def metodo_rk4(f, x0, y0, xf, h):
 
 
 def menu_odes():
-    print("\n=== ECUACIONES DIFERENCIALES ORDINARIAS (TEMA 5) ===\n")
-    print("  1. Metodo de Euler")
-    print("  2. RK2 Punto Medio")
-    print("  3. RK2 Heun  (Trapecio)")
-    print("  4. RK4  (Runge-Kutta orden 4)")
-    try:
-        op = int(input("\nElige [1-4]: ").strip())
-    except Exception:
-        print("Opcion invalida"); return
-    if op not in (1, 2, 3, 4):
-        print("Opcion invalida"); return
-    f, f_str = _pedir_ode()
-    if f is None: return
-    ci = _pedir_ci()
-    if ci is None: return
-    x0, y0, xf, h = ci
-    print(f"\ny' = {f_str},  y({x0}) = {y0},  x ∈ [{x0}, {xf}],  h = {h}")
-    if op == 1:   metodo_euler(f, x0, y0, xf, h)
-    elif op == 2: metodo_rk2_pm(f, x0, y0, xf, h)
-    elif op == 3: metodo_rk2_heun(f, x0, y0, xf, h)
-    elif op == 4: metodo_rk4(f, x0, y0, xf, h)
+    while True:
+        print("\n=== ECUACIONES DIFERENCIALES ORDINARIAS (TEMA 5) ===\n")
+        print("  1. Metodo de Euler")
+        print("  2. RK2 Punto Medio")
+        print("  3. RK2 Heun  (Trapecio)")
+        print("  4. RK4  (Runge-Kutta orden 4)")
+        print("  0. Volver al menu principal")
+        try:
+            op = input("\nElige [0-4]: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            break
+        if op == "0":
+            break
+        try:
+            op = int(op)
+        except Exception:
+            print("Opcion invalida"); continue
+        if op not in (1, 2, 3, 4):
+            print("Opcion invalida"); continue
+        f, f_str = _pedir_ode()
+        if f is None: continue
+        ci = _pedir_ci()
+        if ci is None: continue
+        x0, y0, xf, h = ci
+        print(f"\ny' = {f_str},  y({x0}) = {y0},  x ∈ [{x0}, {xf}],  h = {h}")
+        if op == 1:   metodo_euler(f, x0, y0, xf, h)
+        elif op == 2: metodo_rk2_pm(f, x0, y0, xf, h)
+        elif op == 3: metodo_rk2_heun(f, x0, y0, xf, h)
+        elif op == 4: metodo_rk4(f, x0, y0, xf, h)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
