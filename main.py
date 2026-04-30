@@ -1908,19 +1908,217 @@ def menu_odes():
 # MENU PRINCIPAL
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _pedir_bc(nombre, var):
+    raw = input(f"  {nombre} (constante o expr. en {var}): ").strip()
+    try:
+        c = float(raw)
+        return lambda v, _c=c: _c
+    except ValueError:
+        expr = raw.replace("^", "**").replace("ln(", "log(")
+        def bc(v, _e=expr, _v=var):
+            return eval(_e, _SAFE_XY, {_v: v})
+        try:
+            bc(0.0)
+            return bc
+        except Exception as e:
+            print(f"  Error en '{raw}': {e}")
+            return None
+
+
+def _edp_datos():
+    print("\nDominio rectangular [xa, xb] x [ya, yb]:")
+    print("  Ejemplo: xa=0  xb=1  ya=0  yb=1  (cuadrado unitario)")
+    print("           xa=0  xb=2  ya=0  yb=1  (rectangulo 2x1)\n")
+    try:
+        xa = float(input("  xa = "))
+        xb = float(input("  xb = "))
+        ya = float(input("  ya = "))
+        yb = float(input("  yb = "))
+    except Exception:
+        print("Error: numeros invalidos."); return None
+    if xb <= xa or yb <= ya:
+        print("Error: xb > xa y yb > ya."); return None
+    print()
+    print("Grid — elige como especificar el tamano:")
+    print("  N  -> mismo numero de subdivisiones en x e y")
+    print("  NM -> N subdivisiones en x y M en y (distintos)")
+    print("  h  -> tamanyo de paso (calcula N automaticamente)")
+    modo = input("Escribe N, NM o h: ").strip().lower()
+    try:
+        if modo == "h":
+            h = float(input("  h = "))
+            if h <= 0: raise ValueError
+            Nx = round((xb - xa) / h)
+            Ny = round((yb - ya) / h)
+            if Nx < 2 or Ny < 2: raise ValueError("dominio demasiado pequenyo para ese h")
+            print(f"  -> Nx={Nx} (hx={(xb-xa)/Nx:.6g}),  Ny={Ny} (hy={(yb-ya)/Ny:.6g})")
+        elif modo == "nm":
+            Nx = int(input("  N (nodos en x) = ").strip())
+            Ny = int(input("  M (nodos en y) = ").strip())
+            if Nx < 2 or Ny < 2: raise ValueError
+            print(f"  -> hx={(xb-xa)/Nx:.6g},  hy={(yb-ya)/Ny:.6g}")
+        elif modo == "n":
+            N = int(input("  N = ").strip())
+            if N < 2: raise ValueError
+            Nx = Ny = N
+            print(f"  -> hx={(xb-xa)/Nx:.6g},  hy={(yb-ya)/Ny:.6g}")
+        else:
+            print("Error: escribe N, NM o h."); return None
+    except Exception as e:
+        print(f"Error: {e}"); return None
+    print("\nCondiciones de contorno Dirichlet:")
+    print("  Escribe un numero (constante) o una expresion en la variable indicada.")
+    print("  Ejemplos de constante : 0   100   -5.2")
+    print("  Ejemplos de expresion : x   y^2   sin(x)   exp(y)   x*(1-x)\n")
+    bc_bot   = _pedir_bc("u(x, ya) — inferior  ", "x")
+    bc_top   = _pedir_bc("u(x, yb) — superior  ", "x")
+    bc_left  = _pedir_bc("u(xa, y) — izquierda ", "y")
+    bc_right = _pedir_bc("u(xb, y) — derecha   ", "y")
+    if None in (bc_bot, bc_top, bc_left, bc_right):
+        return None
+    return xa, xb, ya, yb, Nx, Ny, bc_bot, bc_top, bc_left, bc_right
+
+
+def _edp_solver(u, xs, ys, hx, hy, Nx, Ny, f_src, omega, tol, maxit):
+    hx2 = hx * hx
+    hy2 = hy * hy
+    denom = 2.0 * (hx2 + hy2)
+    for it in range(1, maxit + 1):
+        max_delta = 0.0
+        for i in range(1, Nx):
+            for j in range(1, Ny):
+                u_gs = (hy2 * (u[i+1, j] + u[i-1, j])
+                      + hx2 * (u[i, j+1] + u[i, j-1])
+                      - hx2 * hy2 * f_src(xs[i], ys[j])) / denom
+                u_new = (1.0 - omega) * u[i, j] + omega * u_gs
+                delta = abs(u_new - u[i, j])
+                if delta > max_delta:
+                    max_delta = delta
+                u[i, j] = u_new
+        if max_delta < tol:
+            return it, max_delta
+    return maxit, max_delta
+
+
+def _edp_imprimir(u, xs, ys, Nx, Ny):
+    if max(Nx, Ny) > 10:
+        print(f"\n(Grid {Nx+1}x{Ny+1} — se muestran esquinas y centro)")
+        pts_x = [0, Nx // 2, Nx]
+        pts_y = [0, Ny // 2, Ny]
+        print(f"\n{'y\\x':>10}", end="")
+        for i in pts_x:
+            print(f"  {xs[i]:>12.6g}", end="")
+        print()
+        for j in reversed(pts_y):
+            print(f"{ys[j]:>10.6g}", end="")
+            for i in pts_x:
+                print(f"  {u[i, j]:>12.6g}", end="")
+            print()
+        return
+    print(f"\n{'y\\x':>8}", end="")
+    for i in range(Nx + 1):
+        print(f"  {xs[i]:>10.4f}", end="")
+    print()
+    print("-" * (8 + 12 * (Nx + 1)))
+    for j in range(Ny, -1, -1):
+        print(f"{ys[j]:>8.4f}", end="")
+        for i in range(Nx + 1):
+            print(f"  {u[i, j]:>10.6f}", end="")
+        print()
+
+
+def _edp_run(es_poisson, usa_sor):
+    datos = _edp_datos()
+    if datos is None: return
+    xa, xb, ya, yb, Nx, Ny, bc_bot, bc_top, bc_left, bc_right = datos
+    if es_poisson:
+        print("\nTermino fuente f(x,y) tal que  nabla^2 u = f(x,y):")
+        print("  Variables: x, y — mismas funciones que en EDOs")
+        print("  Ejemplos: -2   |  x^2 + y^2   |  sin(pi*x)*sin(pi*y)   |  -4\n")
+        raw = input("  f(x,y) = ").strip().replace("^", "**").replace("ln(", "log(")
+        try:
+            def f_src(x, y, _e=raw): return eval(_e, _SAFE_XY, {"x": x, "y": y})
+            f_src(0.0, 0.0)
+        except Exception as e:
+            print(f"Error: {e}"); return
+    else:
+        def f_src(x, y): return 0.0
+    if usa_sor:
+        rho = 0.5 * (math.cos(math.pi / Nx) + math.cos(math.pi / Ny))
+        omega_opt = 2.0 / (1.0 + math.sqrt(1.0 - rho * rho))
+        print(f"\nFactor de sobre-relajacion omega (optimo aprox. {omega_opt:.4f}):")
+        raw_w = input(f"  omega (Enter = {omega_opt:.4f}): ").strip()
+        try:
+            omega = float(raw_w) if raw_w else omega_opt
+            if not (1.0 < omega < 2.0):
+                print("  Aviso: omega debe estar en (1, 2) para convergencia garantizada.")
+        except Exception:
+            omega = omega_opt
+    else:
+        omega = 1.0
+    tol, maxit = _pedir_tol_iter(1e-5, 10000)
+    xs = np.linspace(xa, xb, Nx + 1)
+    ys = np.linspace(ya, yb, Ny + 1)
+    hx = (xb - xa) / Nx
+    hy = (yb - ya) / Ny
+    u = np.zeros((Nx + 1, Ny + 1))
+    for i in range(Nx + 1):
+        u[i, 0] = bc_bot(xs[i])
+        u[i, Ny] = bc_top(xs[i])
+    for j in range(Ny + 1):
+        u[0, j] = bc_left(ys[j])
+        u[Nx, j] = bc_right(ys[j])
+    nombre = "Poisson" if es_poisson else "Laplace"
+    metodo = f"SOR (omega={omega:.4f})" if usa_sor else "Gauss-Seidel"
+    print(f"\nResolviendo {nombre} — {metodo}  (grid {Nx+1}x{Ny+1})...")
+    it, delta = _edp_solver(u, xs, ys, hx, hy, Nx, Ny, f_src, omega, tol, maxit)
+    print(f"\n{'=' * 55}")
+    if delta < tol:
+        print(f"  Convergencia en {it} iteraciones  (delta = {delta:.3e})")
+    else:
+        print(f"  No convergio en {maxit} iteraciones  (delta = {delta:.3e})")
+    print(f"{'=' * 55}")
+    _edp_imprimir(u, xs, ys, Nx, Ny)
+
+
+def menu_edp():
+    while True:
+        print("\n=== ECUACIONES EN DERIVADAS PARCIALES (TEMA 6) ===\n")
+        print("  Diferencias finitas 5 puntos — condiciones Dirichlet")
+        print()
+        print("  1. Laplace   nabla^2 u = 0        — Gauss-Seidel (Liebmann)")
+        print("  2. Laplace   nabla^2 u = 0        — SOR (sobre-relajacion)")
+        print("  3. Poisson   nabla^2 u = f(x,y)   — Gauss-Seidel")
+        print("  4. Poisson   nabla^2 u = f(x,y)   — SOR")
+        print("  0. Volver al menu principal")
+        try:
+            op = input("\nElige [0-4]: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            break
+        if op == "0": break
+        try:
+            op = int(op)
+        except Exception:
+            print("Opcion invalida"); continue
+        if op not in (1, 2, 3, 4):
+            print("Opcion invalida"); continue
+        _edp_run(es_poisson=(op in (3, 4)), usa_sor=(op in (2, 4)))
+
+
 def main():
     while True:
-        print("\n" + "═" * 60)
+        print("\n" + "=" * 60)
         print("  METODOS NUMERICOS — MENU PRINCIPAL")
-        print("═" * 60)
+        print("=" * 60)
         print("  1. Raices de ecuaciones")
         print("  2. Interpolacion y Aproximacion   (Tema 3)")
         print("  3. Derivacion e Integracion       (Tema 4)")
         print("  4. Ecuaciones Diferenciales       (Tema 5)")
+        print("  5. EDPs Laplace / Poisson         (Tema 6)")
         print("  0. Salir")
-        print("═" * 60)
+        print("=" * 60)
         try:
-            op = input("Elige [0-4]: ").strip()
+            op = input("Elige [0-5]: ").strip()
         except (KeyboardInterrupt, EOFError):
             print("\nHasta luego."); break
         if op == "0":
@@ -1929,8 +2127,9 @@ def main():
         elif op == "2": menu_interp_aprox()
         elif op == "3": menu_derivacion_integracion()
         elif op == "4": menu_odes()
+        elif op == "5": menu_edp()
         else:
-            print("Opcion invalida. Elige entre 0 y 4.")
+            print("Opcion invalida. Elige entre 0 y 5.")
 
 
 if __name__ == "__main__":
