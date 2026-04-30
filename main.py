@@ -1065,7 +1065,7 @@ def menu_interp_aprox():
         elif op == 6:
             if len(np.unique(x)) < len(x):
                 print("Error: xi deben ser distintos para interpolacion."); continue
-            print("\n--- Interpolacion de Newton (diferencias divididas) ---")
+            print("\n--- Interpolacion de Newton (diferencias divididas)4 ---")
             _print_tabla_dif(x, y)
             try:
                 xp = float(input("\nEvaluar en x = ").strip())
