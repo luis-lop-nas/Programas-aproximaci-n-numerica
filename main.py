@@ -1271,6 +1271,147 @@ def _print_d4(res, d4p):
         print(f"  {r['i']:>4} {xi:>16.10g} {da:>18.10g} {dl:>18.10g} {err:>14.6e}")
 
 
+# ─── Aproximacion en un punto desde funcion ──────────────────────────────────
+
+_ESQUEMAS_D1_PT = {
+    "adelante": [
+        ("2 puntos  O(h)",
+         lambda f, x0, h: (f(x0 + h) - f(x0)) / h,
+         "[f(x0+h) - f(x0)] / h"),
+        ("3 puntos  O(h^2)",
+         lambda f, x0, h: (-3*f(x0) + 4*f(x0 + h) - f(x0 + 2*h)) / (2*h),
+         "[-3 f(x0) + 4 f(x0+h) - f(x0+2h)] / (2h)"),
+    ],
+    "central": [
+        ("2 puntos  O(h^2)",
+         lambda f, x0, h: (f(x0 + h) - f(x0 - h)) / (2*h),
+         "[f(x0+h) - f(x0-h)] / (2h)"),
+        ("4 puntos  O(h^4)",
+         lambda f, x0, h: (f(x0 - 2*h) - 8*f(x0 - h) + 8*f(x0 + h) - f(x0 + 2*h)) / (12*h),
+         "[f(x0-2h) - 8 f(x0-h) + 8 f(x0+h) - f(x0+2h)] / (12 h)"),
+    ],
+    "atras": [
+        ("2 puntos  O(h)",
+         lambda f, x0, h: (f(x0) - f(x0 - h)) / h,
+         "[f(x0) - f(x0-h)] / h"),
+        ("3 puntos  O(h^2)",
+         lambda f, x0, h: (3*f(x0) - 4*f(x0 - h) + f(x0 - 2*h)) / (2*h),
+         "[3 f(x0) - 4 f(x0-h) + f(x0-2h)] / (2h)"),
+    ],
+}
+
+_ESQUEMAS_D2_PT = {
+    "adelante": [
+        ("3 puntos  O(h)",
+         lambda f, x0, h: (f(x0) - 2*f(x0 + h) + f(x0 + 2*h)) / h**2,
+         "[f(x0) - 2 f(x0+h) + f(x0+2h)] / h^2"),
+        ("4 puntos  O(h^2)",
+         lambda f, x0, h: (2*f(x0) - 5*f(x0 + h) + 4*f(x0 + 2*h) - f(x0 + 3*h)) / h**2,
+         "[2 f(x0) - 5 f(x0+h) + 4 f(x0+2h) - f(x0+3h)] / h^2"),
+    ],
+    "central": [
+        ("3 puntos  O(h^2)",
+         lambda f, x0, h: (f(x0 - h) - 2*f(x0) + f(x0 + h)) / h**2,
+         "[f(x0-h) - 2 f(x0) + f(x0+h)] / h^2"),
+        ("5 puntos  O(h^4)",
+         lambda f, x0, h: (-f(x0 - 2*h) + 16*f(x0 - h) - 30*f(x0) + 16*f(x0 + h) - f(x0 + 2*h)) / (12*h**2),
+         "[-f(x0-2h) + 16 f(x0-h) - 30 f(x0) + 16 f(x0+h) - f(x0+2h)] / (12 h^2)"),
+    ],
+    "atras": [
+        ("3 puntos  O(h)",
+         lambda f, x0, h: (f(x0) - 2*f(x0 - h) + f(x0 - 2*h)) / h**2,
+         "[f(x0) - 2 f(x0-h) + f(x0-2h)] / h^2"),
+        ("4 puntos  O(h^2)",
+         lambda f, x0, h: (2*f(x0) - 5*f(x0 - h) + 4*f(x0 - 2*h) - f(x0 - 3*h)) / h**2,
+         "[2 f(x0) - 5 f(x0-h) + 4 f(x0-2h) - f(x0-3h)] / h^2"),
+    ],
+}
+
+
+def _aproximar_derivada_punto(orden):
+    """orden: 1 -> primera derivada, 2 -> segunda derivada."""
+    titulo = "PRIMERA" if orden == 1 else "SEGUNDA"
+    etiqueta = "f'" if orden == 1 else "f''"
+    print(f"\n=== APROXIMACION DE LA {titulo} DERIVADA EN UN PUNTO ===\n")
+    print(AYUDA_FUNCIONES)
+
+    f_str = input("\nf(x) = ").strip()
+    if not f_str:
+        print("Error: funcion vacia."); return
+    try:
+        f = crear_funcion_segura(f_str)
+        f(1.0)
+    except Exception as e:
+        print(f"Error en la funcion: {e}"); return
+
+    try:
+        x0 = float(input("x0 = ").strip())
+        h  = float(input("h  = ").strip())
+    except Exception:
+        print("Error: x0 y h deben ser numericos."); return
+    if h <= 0:
+        print("Error: h debe ser > 0."); return
+
+    esq = _pedir_esquema()
+    tabla = _ESQUEMAS_D1_PT if orden == 1 else _ESQUEMAS_D2_PT
+    formulas = tabla[esq]
+
+    print("\nOrden de precision:")
+    for i, (nombre, _, _) in enumerate(formulas, 1):
+        print(f"  {i}. {nombre}")
+    try:
+        op = int(input(f"Elige [1-{len(formulas)}]: ").strip())
+    except Exception:
+        op = 1
+    if op < 1 or op > len(formulas):
+        op = 1
+    nombre, calc, fmla = formulas[op - 1]
+
+    try:
+        valor = float(calc(f, x0, h))
+    except Exception as e:
+        print(f"Error evaluando f en los nodos: {e}"); return
+
+    if orden == 1:
+        offsets = {"adelante": [0, 1, 2], "central": [-2, -1, 1, 2], "atras": [-2, -1, 0]}[esq]
+    else:
+        offsets = {"adelante": [0, 1, 2, 3], "central": [-2, -1, 0, 1, 2], "atras": [-3, -2, -1, 0]}[esq]
+
+    deriv_str = None; deriv_val = None
+    try:
+        if orden == 1:
+            df, deriv_str = derivada_simbolica(f_str)
+            deriv_val = float(df(x0))
+        else:
+            _, _, d2f, deriv_str = derivadas_simbolicas(f_str)
+            deriv_val = float(d2f(x0))
+    except Exception:
+        pass
+
+    print(f"\nConfiguracion:")
+    print(f"  Esquema  : {esq}")
+    print(f"  Precision: {nombre}")
+    print(f"  Formula  : {etiqueta}(x0) ≈ {fmla}")
+    print(f"  x0 = {x0:.10g},  h = {h:.10g}")
+
+    print(f"\nNodos usados:")
+    print(f"  {'k':>4} {'x_k':>16} {'f(x_k)':>18}")
+    print("  " + "-" * 42)
+    for k in offsets:
+        xk = x0 + k*h
+        try: fk = float(f(xk))
+        except Exception: fk = float("nan")
+        print(f"  {k:>4} {xk:>16.10g} {fk:>18.10g}")
+
+    print(f"\nResultado:")
+    print(f"  {etiqueta}({x0:.10g}) ≈ {valor:.10g}")
+    if deriv_val is not None:
+        err = abs(valor - deriv_val)
+        print(f"  {etiqueta}_exacta(x) = {deriv_str}")
+        print(f"  {etiqueta}_exacta({x0:.10g}) = {deriv_val:.10g}")
+        print(f"  |Error| = {err:.6e}")
+
+
 # ─── Modulo derivacion desde puntos ──────────────────────────────────────────
 
 def _print_tabla_h(x, h):
@@ -1301,11 +1442,53 @@ def _resolver_modo_h(es_cte, modo, h):
 def _pedir_modo_h():
     print("\nModo de trabajo para h:")
     print("  1. Detectar automaticamente si h es constante")
-    print("  2. Forzar h constante")
+    print("  2. Forzar h constante  (usa h promedio con los y originales)")
     print("  3. Forzar h no constante")
-    try: modo = int(input("Elige [1-3]: ").strip())
+    print("  4. h constante via interpolacion local  (remuestrea en malla uniforme)")
+    try: modo = int(input("Elige [1-4]: ").strip())
     except Exception: modo = 1
-    return modo if modo in (1, 2, 3) else 1
+    return modo if modo in (1, 2, 3, 4) else 1
+
+
+def _interpolar_uniforme(x_orig, y_orig):
+    """
+    Remuestrea (x_orig, y_orig) en una malla uniforme usando interpolacion local
+    de Lagrange con los 3 puntos originales mas cercanos a cada nodo nuevo.
+    Pide h al usuario (por defecto h = h_prom).
+    Devuelve (x_uni, y_uni, h_uni).
+    """
+    h_prom = float(np.mean(np.diff(x_orig)))
+    print(f"\n  Interpolacion local a malla uniforme:")
+    print(f"  Sugerencia h = h_prom = {h_prom:.10g}")
+    try:
+        h_in = input("  h (Enter para usar h_prom): ").strip()
+        h_uni = float(h_in) if h_in else h_prom
+    except Exception:
+        h_uni = h_prom
+    if h_uni <= 0:
+        print("  h debe ser > 0 — se usa h_prom."); h_uni = h_prom
+
+    x_a, x_b = float(x_orig[0]), float(x_orig[-1])
+    n_int = max(2, round((x_b - x_a) / h_uni))
+    h_uni = (x_b - x_a) / n_int          # ajuste exacto para cubrir [x_a, x_b]
+    x_uni = np.array([x_a + i * h_uni for i in range(n_int + 1)])
+
+    n_orig = x_orig.size
+    y_uni = np.zeros(x_uni.size)
+    for k, xk in enumerate(x_uni):
+        dists = np.abs(x_orig - xk)
+        idx3 = np.sort(np.argsort(dists)[:min(3, n_orig)])
+        x3 = x_orig[idx3]; y3 = y_orig[idx3]
+        val = 0.0
+        for i in range(len(x3)):
+            L = 1.0
+            for j in range(len(x3)):
+                if i != j:
+                    L *= (xk - x3[j]) / (x3[i] - x3[j])
+            val += float(y3[i]) * L
+        y_uni[k] = val
+
+    return x_uni, y_uni, h_uni
 
 
 def _pedir_esquema():
@@ -1316,6 +1499,199 @@ def _pedir_esquema():
     try: e = int(input("Elige [1-3]: ").strip())
     except Exception: e = 2
     return {1: "adelante", 2: "central", 3: "atras"}.get(e, "central")
+
+
+def _aproximar_derivada_punto_tabla(orden):
+    """Aproxima la n-esima derivada en un nodo concreto eligiendo esquema adelante/central/atras."""
+    titulo = "PRIMERA" if orden == 1 else "SEGUNDA"
+    etiqueta = "f'" if orden == 1 else "f''"
+    print(f"\n=== APROXIMACION DE LA {titulo} DERIVADA EN UN PUNTO (DESDE TABLA) ===\n")
+
+    try:
+        x = _leer_arr("x"); y = _leer_arr("y")
+        x, y = _validar_ord(x, y)
+    except ValueError as e:
+        print(e); return
+
+    n = x.size
+    print(f"\nPuntos ordenados ({n} puntos):")
+    print(f"  {'i':>4} {'x_i':>16} {'y_i':>16}")
+    print("  " + "-" * 40)
+    for i, (xi, yi) in enumerate(zip(x, y)):
+        print(f"  {i:>4} {xi:>16.10g} {yi:>16.10g}")
+
+    h_arr, h0, es_cte, _ = _calc_h(x)
+    _print_tabla_h(x, h_arr)
+
+    try:
+        idx = int(input(f"\nIndice i del nodo a aproximar [0-{n-1}]: ").strip())
+    except Exception:
+        print("Error: indice invalido."); return
+    if idx < 0 or idx >= n:
+        print(f"Error: indice fuera de rango [0, {n-1}]."); return
+
+    esq = _pedir_esquema()
+
+    # Validacion segun esquema (ambas derivadas necesitan 3 nodos)
+    if esq == "adelante" and idx + 2 >= n:
+        print(f"Error: adelante en i={idx} necesita hasta i={idx+2} (solo hay {n} puntos)."); return
+    if esq == "central" and (idx == 0 or idx == n - 1):
+        print(f"Error: central necesita vecinos a ambos lados (i=0 e i={n-1} no validos)."); return
+    if esq == "atras" and idx - 2 < 0:
+        print(f"Error: atras en i={idx} necesita desde i={idx-2}."); return
+
+    modo = _pedir_modo_h()
+
+    # Referencia Lagrange global sobre datos originales
+    p_lag = _polinomio_lag(x, y)
+    dp_ref = np.polyder(p_lag, orden)
+    der_sym = "'" * orden
+    print(f"\n  P_{n-1}{der_sym}(x) = {_fmt_poly(dp_ref)}")
+
+    # ── Modo 4: remuestrear en malla uniforme ──────────────────────────────────
+    if modo == 4:
+        x_c, y_c, h_usar = _interpolar_uniforme(x, y)
+        n_c = x_c.size
+        print(f"\n  Malla uniforme ({n_c} puntos, h = {h_usar:.10g}):")
+        print(f"  {'i':>4} {'x_i':>16} {'y_i':>16}")
+        print("  " + "-" * 40)
+        for i, (xi, yi) in enumerate(zip(x_c, y_c)):
+            print(f"  {i:>4} {xi:>16.10g} {yi:>16.10g}")
+
+        # nodo de la malla uniforme mas cercano al x[idx] solicitado
+        idx_c = int(np.argmin(np.abs(x_c - x[idx])))
+        print(f"\n  Nodo mas cercano en malla uniforme: i={idx_c},  x={x_c[idx_c]:.10g}  (solicitado: x={x[idx]:.10g})")
+
+        if esq == "adelante" and idx_c + 2 >= n_c:
+            print(f"Error: adelante en i={idx_c} necesita hasta i={idx_c+2} (malla tiene {n_c} puntos)."); return
+        if esq == "central" and (idx_c == 0 or idx_c == n_c - 1):
+            print(f"Error: central necesita vecinos a ambos lados en la malla uniforme."); return
+        if esq == "atras" and idx_c - 2 < 0:
+            print(f"Error: atras en i={idx_c} necesita desde i={idx_c-2}."); return
+
+        hh = h_usar
+        if orden == 1:
+            if esq == "adelante":
+                d = (-3*y_c[idx_c] + 4*y_c[idx_c+1] - y_c[idx_c+2]) / (2*hh)
+                nodos_str = f"x{idx_c}, x{idx_c+1}, x{idx_c+2}  (malla uniforme)"
+                formula_str = "[-3 f + 4 f(+h) - f(+2h)] / (2h)"
+            elif esq == "central":
+                d = (y_c[idx_c+1] - y_c[idx_c-1]) / (2*hh)
+                nodos_str = f"x{idx_c-1}, x{idx_c}, x{idx_c+1}  (malla uniforme)"
+                formula_str = "[f(+h) - f(-h)] / (2h)"
+            else:
+                d = (3*y_c[idx_c] - 4*y_c[idx_c-1] + y_c[idx_c-2]) / (2*hh)
+                nodos_str = f"x{idx_c-2}, x{idx_c-1}, x{idx_c}  (malla uniforme)"
+                formula_str = "[3 f - 4 f(-h) + f(-2h)] / (2h)"
+        else:
+            if esq == "adelante":
+                d = (y_c[idx_c] - 2*y_c[idx_c+1] + y_c[idx_c+2]) / hh**2
+                nodos_str = f"x{idx_c}, x{idx_c+1}, x{idx_c+2}  (malla uniforme)"
+                formula_str = "[f - 2 f(+h) + f(+2h)] / h^2"
+            elif esq == "central":
+                d = (y_c[idx_c-1] - 2*y_c[idx_c] + y_c[idx_c+1]) / hh**2
+                nodos_str = f"x{idx_c-1}, x{idx_c}, x{idx_c+1}  (malla uniforme)"
+                formula_str = "[f(-h) - 2 f + f(+h)] / h^2"
+            else:
+                d = (y_c[idx_c] - 2*y_c[idx_c-1] + y_c[idx_c-2]) / hh**2
+                nodos_str = f"x{idx_c-2}, x{idx_c-1}, x{idx_c}  (malla uniforme)"
+                formula_str = "[f - 2 f(-h) + f(-2h)] / h^2"
+
+        x_eval = x_c[idx_c]
+        print(f"\nConfiguracion:")
+        print(f"  Tipo de h : constante (interpolacion local Lagrange)")
+        print(f"  h = {h_usar:.10g},  Esquema : {esq}")
+
+    # ── Modos 1-3: datos originales ────────────────────────────────────────────
+    else:
+        usar_cte, h_prom, aviso = _resolver_modo_h(es_cte, modo, h_arr)
+        h_usar = h0 if (usar_cte and es_cte) else h_prom
+        tipo_h = "constante" if usar_cte else "no constante"
+        origen = {1: "automatico", 2: "forzado", 3: "forzado"}[modo]
+        print(f"\nConfiguracion:")
+        print(f"  Nodo      : i = {idx},  x_{idx} = {x[idx]:.10g}")
+        print(f"  Esquema   : {esq}")
+        print(f"  Tipo de h : {tipo_h} ({origen})")
+        if aviso: print(f"  Aviso     : {aviso}")
+
+        if orden == 1:
+            if usar_cte:
+                hh = h_usar
+                if esq == "adelante":
+                    d = (-3*y[idx] + 4*y[idx+1] - y[idx+2]) / (2*hh)
+                    nodos_str = f"x{idx}, x{idx+1}, x{idx+2}"
+                    formula_str = f"[-3 f(x{idx}) + 4 f(x{idx+1}) - f(x{idx+2})] / (2h)"
+                elif esq == "central":
+                    d = (y[idx+1] - y[idx-1]) / (2*hh)
+                    nodos_str = f"x{idx-1}, x{idx}, x{idx+1}"
+                    formula_str = f"[f(x{idx+1}) - f(x{idx-1})] / (2h)"
+                else:
+                    d = (3*y[idx] - 4*y[idx-1] + y[idx-2]) / (2*hh)
+                    nodos_str = f"x{idx-2}, x{idx-1}, x{idx}"
+                    formula_str = f"[3 f(x{idx}) - 4 f(x{idx-1}) + f(x{idx-2})] / (2h)"
+            else:
+                if esq == "adelante":
+                    h1 = x[idx+1]-x[idx]; h2 = x[idx+2]-x[idx+1]
+                    c0 = -(2*h1+h2)/(h1*(h1+h2)); c1 = (h1+h2)/(h1*h2); c2 = -h1/(h2*(h1+h2))
+                    d = c0*y[idx] + c1*y[idx+1] + c2*y[idx+2]
+                    nodos_str = f"x{idx}, x{idx+1}, x{idx+2}"
+                    formula_str = "Lagrange 3 puntos (h variable), adelante"
+                elif esq == "central":
+                    h1 = x[idx]-x[idx-1]; h2 = x[idx+1]-x[idx]
+                    ci = -h2/(h1*(h1+h2)); c0 = (h2-h1)/(h1*h2); cd = h1/(h2*(h1+h2))
+                    d = ci*y[idx-1] + c0*y[idx] + cd*y[idx+1]
+                    nodos_str = f"x{idx-1}, x{idx}, x{idx+1}"
+                    formula_str = "Lagrange 3 puntos (h variable), central"
+                else:
+                    h1 = x[idx]-x[idx-1]; h2 = x[idx-1]-x[idx-2]
+                    c0 = (2*h1+h2)/(h1*(h1+h2)); c1 = -(h1+h2)/(h1*h2); c2 = h1/(h2*(h1+h2))
+                    d = c0*y[idx] + c1*y[idx-1] + c2*y[idx-2]
+                    nodos_str = f"x{idx-2}, x{idx-1}, x{idx}"
+                    formula_str = "Lagrange 3 puntos (h variable), atras"
+        else:  # orden 2
+            if usar_cte:
+                hh = h_usar
+                if esq == "adelante":
+                    d = (y[idx] - 2*y[idx+1] + y[idx+2]) / hh**2
+                    nodos_str = f"x{idx}, x{idx+1}, x{idx+2}"
+                    formula_str = f"[f(x{idx}) - 2 f(x{idx+1}) + f(x{idx+2})] / h^2"
+                elif esq == "central":
+                    d = (y[idx-1] - 2*y[idx] + y[idx+1]) / hh**2
+                    nodos_str = f"x{idx-1}, x{idx}, x{idx+1}"
+                    formula_str = f"[f(x{idx-1}) - 2 f(x{idx}) + f(x{idx+1})] / h^2"
+                else:
+                    d = (y[idx] - 2*y[idx-1] + y[idx-2]) / hh**2
+                    nodos_str = f"x{idx-2}, x{idx-1}, x{idx}"
+                    formula_str = f"[f(x{idx}) - 2 f(x{idx-1}) + f(x{idx-2})] / h^2"
+            else:
+                if esq == "adelante":
+                    h1 = x[idx+1]-x[idx]; h2 = x[idx+2]-x[idx+1]
+                    d = 2*(y[idx]/(h1*(h1+h2)) - y[idx+1]/(h1*h2) + y[idx+2]/(h2*(h1+h2)))
+                    nodos_str = f"x{idx}, x{idx+1}, x{idx+2}"
+                    formula_str = "2a der. Lagrange 3 puntos (h variable), adelante"
+                elif esq == "central":
+                    h1 = x[idx]-x[idx-1]; h2 = x[idx+1]-x[idx]
+                    d = 2*(y[idx-1]/(h1*(h1+h2)) - y[idx]/(h1*h2) + y[idx+1]/(h2*(h1+h2)))
+                    nodos_str = f"x{idx-1}, x{idx}, x{idx+1}"
+                    formula_str = "2a der. Lagrange 3 puntos (h variable), central"
+                else:
+                    h1 = x[idx-1]-x[idx-2]; h2 = x[idx]-x[idx-1]
+                    d = 2*(y[idx-2]/(h1*(h1+h2)) - y[idx-1]/(h1*h2) + y[idx]/(h2*(h1+h2)))
+                    nodos_str = f"x{idx-2}, x{idx-1}, x{idx}"
+                    formula_str = "2a der. Lagrange 3 puntos (h variable), atras"
+
+        x_eval = x[idx]
+        if usar_cte:
+            print(f"  h = {h_usar:.10g}")
+
+    d_lag = float(dp_ref(x_eval))
+    print(f"\nNodos usados : {nodos_str}")
+    print(f"Formula      : {etiqueta} ≈ {formula_str}")
+
+    print(f"\nResultado:")
+    print(f"  {etiqueta}({x_eval:.10g}) ≈ {float(d):.10g}")
+    print(f"  {etiqueta}_Lag({x_eval:.10g})  = {d_lag:.10g}")
+    print(f"  |Error|             = {abs(float(d) - d_lag):.6e}")
 
 
 def _modulo_derivacion_puntos():
@@ -1330,6 +1706,22 @@ def _modulo_derivacion_puntos():
         print("Opcion invalida"); return
     if sub not in (1, 2, 3, 4):
         print("Opcion invalida"); return
+
+    if sub in (1, 2):
+        print("\nModo de trabajo:")
+        print("  1. Aproximar en todos los nodos usando tabla (x, y)")
+        print("  2. Aproximar en un nodo concreto usando tabla (x, y)  (adelante / central / atras)")
+        print("  3. Aproximar en un punto desde la funcion f(x)        (adelante / central / atras)")
+        try:
+            modo_in = int(input("Elige [1-3]: ").strip())
+        except Exception:
+            modo_in = 1
+        if modo_in == 2:
+            _aproximar_derivada_punto_tabla(sub)
+            return
+        if modo_in == 3:
+            _aproximar_derivada_punto(sub)
+            return
 
     try:
         x = _leer_arr("x"); y = _leer_arr("y")
@@ -1363,42 +1755,64 @@ def _modulo_derivacion_puntos():
 
     if sub == 1:
         modo = _pedir_modo_h()
-        usar_cte, h_prom, aviso = _resolver_modo_h(es_cte, modo, h)
         esq = _pedir_esquema()
-
-        tipo_h = "constante" if usar_cte else "no constante"
-        origen = {1: "automatico", 2: "forzado", 3: "forzado"}[modo]
-        print(f"\nConfiguracion elegida:")
-        print(f"  Tipo de h : {tipo_h} ({origen})")
-        print(f"  Esquema   : {esq}")
-        if aviso: print(f"  Aviso     : {aviso}")
-
         dp = np.polyder(p_lag)
         print(f"\nDerivada del polinomio global:")
         print(f"  P_{x.size-1}'(x) = {_fmt_poly(dp)}")
 
-        h_usar = h0 if (usar_cte and es_cte) else h_prom
-        res = _d1_hcte(x, y, esq, h_usar) if usar_cte else _d1_hvar(x, y, esq)
+        if modo == 4:
+            x_c, y_c, h_usar = _interpolar_uniforme(x, y)
+            print(f"\n  Malla uniforme ({x_c.size} puntos, h = {h_usar:.10g}):")
+            print(f"  {'i':>4} {'x_i':>16} {'y_i':>16}")
+            print("  " + "-" * 40)
+            for i, (xi, yi) in enumerate(zip(x_c, y_c)):
+                print(f"  {i:>4} {xi:>16.10g} {yi:>16.10g}")
+            print(f"\nConfiguracion elegida:")
+            print(f"  Tipo de h : constante (interpolacion local Lagrange)")
+            print(f"  h = {h_usar:.10g},  Esquema : {esq}")
+            res = _d1_hcte(x_c, y_c, esq, h_usar)
+        else:
+            usar_cte, h_prom, aviso = _resolver_modo_h(es_cte, modo, h)
+            tipo_h = "constante" if usar_cte else "no constante"
+            origen = {1: "automatico", 2: "forzado", 3: "forzado"}[modo]
+            print(f"\nConfiguracion elegida:")
+            print(f"  Tipo de h : {tipo_h} ({origen})")
+            print(f"  Esquema   : {esq}")
+            if aviso: print(f"  Aviso     : {aviso}")
+            h_usar = h0 if (usar_cte and es_cte) else h_prom
+            res = _d1_hcte(x, y, esq, h_usar) if usar_cte else _d1_hvar(x, y, esq)
+
         if not res:
             print("No hay suficientes nodos para el esquema elegido."); return
         _print_d1(res, dp)
 
     elif sub == 2:
         modo = _pedir_modo_h()
-        usar_cte, h_prom, aviso = _resolver_modo_h(es_cte, modo, h)
-
-        tipo_h = "constante" if usar_cte else "no constante"
-        origen = {1: "automatico", 2: "forzado", 3: "forzado"}[modo]
-        print(f"\nConfiguracion elegida:")
-        print(f"  Tipo de h : {tipo_h} ({origen})")
-        if aviso: print(f"  Aviso     : {aviso}")
-
         d2p = np.polyder(p_lag, 2)
         print(f"\nSegunda derivada del polinomio global:")
         print(f"  P_{x.size-1}''(x) = {_fmt_poly(d2p)}")
 
-        h_usar = h0 if (usar_cte and es_cte) else h_prom
-        res = _d2_hcte(x, y, h_usar) if usar_cte else _d2_hvar(x, y)
+        if modo == 4:
+            x_c, y_c, h_usar = _interpolar_uniforme(x, y)
+            print(f"\n  Malla uniforme ({x_c.size} puntos, h = {h_usar:.10g}):")
+            print(f"  {'i':>4} {'x_i':>16} {'y_i':>16}")
+            print("  " + "-" * 40)
+            for i, (xi, yi) in enumerate(zip(x_c, y_c)):
+                print(f"  {i:>4} {xi:>16.10g} {yi:>16.10g}")
+            print(f"\nConfiguracion elegida:")
+            print(f"  Tipo de h : constante (interpolacion local Lagrange)")
+            print(f"  h = {h_usar:.10g}")
+            res = _d2_hcte(x_c, y_c, h_usar)
+        else:
+            usar_cte, h_prom, aviso = _resolver_modo_h(es_cte, modo, h)
+            tipo_h = "constante" if usar_cte else "no constante"
+            origen = {1: "automatico", 2: "forzado", 3: "forzado"}[modo]
+            print(f"\nConfiguracion elegida:")
+            print(f"  Tipo de h : {tipo_h} ({origen})")
+            if aviso: print(f"  Aviso     : {aviso}")
+            h_usar = h0 if (usar_cte and es_cte) else h_prom
+            res = _d2_hcte(x, y, h_usar) if usar_cte else _d2_hvar(x, y)
+
         if not res:
             print("No hay nodos interiores."); return
         _print_d2(res, d2p)
@@ -1613,6 +2027,41 @@ def _integ_dos_puntos(f, a, b):
     return res
 
 
+def _abiertas_tabular(x, y):
+    """
+    Formulas abiertas de Newton-Cotes desde datos tabulados.
+    x, y son SOLO los puntos interiores (sin los extremos del intervalo).
+    Se admiten 1, 2, 3 o 4 puntos interiores, igualmente espaciados.
+    Devuelve (resultado, nombre, formula, h, a, b).
+    """
+    n = x.size
+    if n < 1 or n > 4:
+        raise ValueError(f"Formulas abiertas admiten 1–4 puntos interiores ({n} dados).")
+    if n > 1:
+        h_arr = np.diff(x)
+        h0 = float(h_arr[0])
+        if not np.allclose(h_arr, h0, atol=1e-10, rtol=1e-8):
+            raise ValueError("Los puntos interiores deben estar igualmente espaciados.")
+        h = h0
+    else:
+        raise ValueError("Con 1 punto interior debes indicar h manualmente (usa modo 7).")
+    a = float(x[0]) - h
+    b = float(x[-1]) + h
+    if n == 2:
+        res = 3*h/2 * (y[0] + y[1])
+        nombre = "Dos puntos (abierta)"
+        formula = "3h/2 · (f₁ + f₂)"
+    elif n == 3:
+        res = 4*h/3 * (2*y[0] - y[1] + 2*y[2])
+        nombre = "Milne — 3 puntos interiores"
+        formula = "4h/3 · (2f₁ - f₂ + 2f₃)"
+    else:  # n == 4
+        res = 5*h/24 * (11*y[0] + y[1] + y[2] + 11*y[3])
+        nombre = "4 puntos interiores"
+        formula = "5h/24 · (11f₁ + f₂ + f₃ + 11f₄)"
+    return float(res), nombre, formula, h, a, b
+
+
 _INTEG_COMP = {"4", "5", "6"}
 
 _INTEG_OPS = {
@@ -1624,7 +2073,7 @@ _INTEG_OPS = {
     "6": "Simpson 3/8 compuesto      [cerrada, n mult. 3]",
     "7": "Punto medio                [abierta, 1 pt interior]",
     "8": "Dos puntos                 [abierta, 2 pts interiores]",
-    "9": "Desde datos tabulados      [Trapecio / S1/3 / S3/8]",
+    "9": "Desde datos tabulados      [Trapecio / S1/3 / S3/8 / abiertas]",
 }
 
 
@@ -1648,16 +2097,55 @@ def _modulo_integracion():
 
     # ── Modo datos tabulados ────────────────────────────────────────────────
     if op == "9":
-        print("\n  1. Trapecio compuesto  (h variable)")
-        print("  2. Simpson 1/3         (n par, h cte)")
-        print("  3. Simpson 3/8         (n mult.3, h cte)")
+        print("\n  Formulas cerradas (incluyen extremos):")
+        print("    1. Trapecio compuesto  (h variable)")
+        print("    2. Simpson 1/3         (n par, h cte)")
+        print("    3. Simpson 3/8         (n mult.3, h cte)")
+        print("  Formulas abiertas (solo puntos interiores, sin extremos):")
+        print("    4. Dos puntos          (2 pts interiores, h cte)")
+        print("    5. Milne               (3 pts interiores, h cte)")
+        print("    6. Cuatro puntos       (4 pts interiores, h cte)")
         try:
-            sub = int(input("  Metodo [1-3]: ").strip())
+            sub = int(input("  Metodo [1-6]: ").strip())
         except Exception:
             print("Opcion invalida"); return
-        if sub not in (1, 2, 3):
+        if sub not in (1, 2, 3, 4, 5, 6):
             print("Opcion invalida"); return
-        print("\nIngresa los puntos tabulares.")
+
+        # ── Formulas abiertas desde datos ──────────────────────────────────
+        if sub in (4, 5, 6):
+            n_req = {4: 2, 5: 3, 6: 4}[sub]
+            print(f"\nIngresa los {n_req} punto(s) INTERIOR(ES) del intervalo.")
+            print("  (NO incluyas los extremos a y b del intervalo de integracion)")
+            try:
+                x = _leer_arr("x (interiores)"); y = _leer_arr("y (interiores)")
+            except ValueError as e:
+                print(e); return
+            if x.size != y.size:
+                print("Error: x e y deben tener igual longitud."); return
+            if x.size != n_req:
+                print(f"Error: se necesitan exactamente {n_req} punto(s) interior(es) ({x.size} dados)."); return
+            orden = np.argsort(x); x = x[orden]; y = y[orden]
+            try:
+                r, nombre, formula, h, a, b = _abiertas_tabular(x, y)
+            except ValueError as e:
+                print(f"Error: {e}"); return
+            print(f"\nMetodo     : {nombre}")
+            print(f"Formula    : I ≈ {formula}")
+            print(f"Intervalo  : [{a:.6g}, {b:.6g}]  (inferido de los puntos interiores)")
+            print(f"h = {h:.6g}")
+            print(f"\nPuntos interiores usados:")
+            print(f"  {'i':>4} {'x_i':>14} {'y_i':>16}")
+            print("  " + "-" * 38)
+            for i, (xi, yi) in enumerate(zip(x, y), 1):
+                print(f"  {i:>4} {xi:>14.8g} {yi:>16.10g}")
+            print(f"\n{'═'*52}")
+            print(f"  RESULTADO: I ≈ {r:.10g}")
+            print(f"{'═'*52}")
+            return
+
+        # ── Formulas cerradas desde datos ───────────────────────────────────
+        print("\nIngresa los puntos tabulares (incluyendo extremos).")
         try:
             x = _leer_arr("x"); y = _leer_arr("y")
         except ValueError as e:
@@ -1674,13 +2162,13 @@ def _modulo_integracion():
         try:
             if sub == 1:
                 r = _trapecio(x, y)
-                print(f"\nTrapecio:    I ≈ {r:.10g}")
+                print(f"\nTrapecio compuesto:  I ≈ {r:.10g}")
             elif sub == 2:
                 r = _simpson13(x, y)
-                print(f"\nSimpson 1/3: I ≈ {r:.10g}")
+                print(f"\nSimpson 1/3:  I ≈ {r:.10g}")
             else:
                 r = _simpson38(x, y)
-                print(f"\nSimpson 3/8: I ≈ {r:.10g}")
+                print(f"\nSimpson 3/8:  I ≈ {r:.10g}")
         except ValueError as e:
             print(f"Error: {e}")
         return
@@ -1872,16 +2360,243 @@ def metodo_rk4(f, x0, y0, xf, h):
     return y
 
 
+# ─── Sistema de 2 EDOs ────────────────────────────────────────────────────────
+
+_AYUDA_TXY = (
+    "Funciones disponibles (variables: t, x, y):\n"
+    "  sin, cos, tan, exp, log (=ln), sqrt, abs\n"
+    "Constantes: pi, e  |  Potencias: usa ^ o **\n"
+    "Ejemplos:  0.5*x - 0.02*x*y   |   -0.3*y + 0.01*x*y"
+)
+
+
+def _crear_func_txy(expr_str):
+    expr = expr_str.strip().replace("^", "**").replace("ln(", "log(")
+    def f(t, x, y):
+        return eval(expr, _SAFE_XY, {"t": t, "x": x, "y": y})
+    return f
+
+
+def _pedir_sistema2():
+    print(_AYUDA_TXY)
+    print("\nIngresa el sistema:  dx/dt = f1(t,x,y)   dy/dt = f2(t,x,y)\n")
+    f1_str = input("f1(t,x,y) = ").strip()
+    f2_str = input("f2(t,x,y) = ").strip()
+    try:
+        f1 = _crear_func_txy(f1_str); f1(0, 1, 1)
+        f2 = _crear_func_txy(f2_str); f2(0, 1, 1)
+    except Exception as e:
+        print(f"Error: {e}"); return None, None, None, None
+    return f1, f2, f1_str, f2_str
+
+
+def _pedir_ci_sistema():
+    try:
+        t0 = float(input("t0 = "))
+        x0 = float(input("x(t0) = "))
+        y0 = float(input("y(t0) = "))
+        tf = float(input("t final = "))
+        if tf <= t0:
+            print("Error: t final > t0"); return None
+        h_str = input("Paso h (Enter para n): ").strip()
+        if h_str:
+            h = float(h_str)
+        else:
+            n = int(input("n = ").strip())
+            h = (tf - t0) / n
+        if h <= 0:
+            print("Error: h debe ser > 0"); return None
+    except Exception:
+        print("Error: numeros invalidos."); return None
+    return t0, x0, y0, tf, h
+
+
+def _s2_euler_paso(f1, f2, t, x, y, h):
+    k1 = f1(t, x, y); k2 = f2(t, x, y)
+    return x + h*k1, y + h*k2
+
+
+def _s2_rk2pm_paso(f1, f2, t, x, y, h):
+    k1x = f1(t, x, y); k1y = f2(t, x, y)
+    k2x = f1(t+h/2, x+h/2*k1x, y+h/2*k1y)
+    k2y = f2(t+h/2, x+h/2*k1x, y+h/2*k1y)
+    return x + h*k2x, y + h*k2y
+
+
+def _s2_heun_paso(f1, f2, t, x, y, h):
+    k1x = f1(t, x, y); k1y = f2(t, x, y)
+    k2x = f1(t+h, x+h*k1x, y+h*k1y)
+    k2y = f2(t+h, x+h*k1x, y+h*k1y)
+    return x + (h/2)*(k1x+k2x), y + (h/2)*(k1y+k2y)
+
+
+def _s2_rk4_paso(f1, f2, t, x, y, h):
+    k1x = f1(t,      x,          y         )
+    k1y = f2(t,      x,          y         )
+    k2x = f1(t+h/2,  x+h/2*k1x, y+h/2*k1y)
+    k2y = f2(t+h/2,  x+h/2*k1x, y+h/2*k1y)
+    k3x = f1(t+h/2,  x+h/2*k2x, y+h/2*k2y)
+    k3y = f2(t+h/2,  x+h/2*k2x, y+h/2*k2y)
+    k4x = f1(t+h,    x+h*k3x,   y+h*k3y  )
+    k4y = f2(t+h,    x+h*k3x,   y+h*k3y  )
+    return (x + h/6*(k1x+2*k2x+2*k3x+k4x),
+            y + h/6*(k1y+2*k2y+2*k3y+k4y))
+
+
+def _sistema2_run(f1, f2, f1_str, f2_str, paso_fn, nombre, t0, x0, y0, tf, h):
+    print(f"\n--- Sistema 2 EDOs — {nombre} ---")
+    print(f"dx/dt = {f1_str}")
+    print(f"dy/dt = {f2_str}")
+    hdr = f"{'n':<5} {'t_n':<12} {'x_n':<14} {'y_n':<14} {'x_n+1':<14} {'y_n+1':<14}"
+    print("\n" + hdr + "\n" + "-" * len(hdr))
+    t, x, y = t0, x0, y0; paso = 0
+    while t < tf - 1e-14:
+        h_ef = min(h, tf - t)
+        try:
+            xn, yn = paso_fn(f1, f2, t, x, y, h_ef)
+        except Exception as e:
+            print(f"Error: {e}"); return
+        print(f"{paso:<5} {t:<12.6g} {x:<14.8g} {y:<14.8g} {xn:<14.8g} {yn:<14.8g}")
+        t = round(t + h_ef, 14); x, y = xn, yn; paso += 1
+    print(f"\nx(t={tf}) ≈ {x:.10g}")
+    print(f"y(t={tf}) ≈ {y:.10g}")
+
+
+# ─── EDO de 2° orden ──────────────────────────────────────────────────────────
+
+_AYUDA_TXV = (
+    "Funciones disponibles (variables: t, x, v  donde v = x'):\n"
+    "  sin, cos, tan, exp, log (=ln), sqrt, abs\n"
+    "Constantes: pi, e  |  Potencias: usa ^ o **\n"
+    "Ejemplos:\n"
+    "  x'' + 4x = 0           ->  -4*x\n"
+    "  x'' + 0.5x' + 4x = 0  ->  -0.5*v - 4*x\n"
+    "  x'' + 2x' + 5x = sin(t)->  sin(t) - 2*v - 5*x"
+)
+
+
+def _crear_func_txv(expr_str):
+    expr = expr_str.strip().replace("^", "**").replace("ln(", "log(")
+    def f(t, x, v):
+        return eval(expr, _SAFE_XY, {"t": t, "x": x, "v": v})
+    return f
+
+
+def _pedir_edo2():
+    print(_AYUDA_TXV)
+    print("\nIngresa  x'' = f(t, x, v):\n")
+    f_str = input("f(t, x, v) = ").strip()
+    try:
+        f = _crear_func_txv(f_str); f(0, 1, 0)
+    except Exception as e:
+        print(f"Error: {e}"); return None, None
+    return f, f_str
+
+
+def _pedir_ci_edo2():
+    try:
+        t0 = float(input("t0 = "))
+        x0 = float(input("x(t0) = "))
+        v0 = float(input("x'(t0) = "))
+        tf = float(input("t final = "))
+        if tf <= t0:
+            print("Error: t final > t0"); return None
+        h_str = input("Paso h (Enter para n): ").strip()
+        if h_str:
+            h = float(h_str)
+        else:
+            n = int(input("n = ").strip())
+            h = (tf - t0) / n
+        if h <= 0:
+            print("Error: h debe ser > 0"); return None
+    except Exception:
+        print("Error: numeros invalidos."); return None
+    return t0, x0, v0, tf, h
+
+
+def _e2_euler_paso(f, t, x, v, h):
+    return x + h*v, v + h*f(t, x, v)
+
+
+def _e2_rk2pm_paso(f, t, x, v, h):
+    k1x = v;           k1v = f(t,      x,          v         )
+    k2x = v + h/2*k1v; k2v = f(t+h/2,  x+h/2*k1x, v+h/2*k1v)
+    return x + h*k2x, v + h*k2v
+
+
+def _e2_rk4_paso(f, t, x, v, h):
+    k1x = v;           k1v = f(t,      x,          v         )
+    k2x = v + h/2*k1v; k2v = f(t+h/2,  x+h/2*k1x, v+h/2*k1v)
+    k3x = v + h/2*k2v; k3v = f(t+h/2,  x+h/2*k2x, v+h/2*k2v)
+    k4x = v + h*k3v;   k4v = f(t+h,    x+h*k3x,   v+h*k3v  )
+    return (x + h/6*(k1x+2*k2x+2*k3x+k4x),
+            v + h/6*(k1v+2*k2v+2*k3v+k4v))
+
+
+def _edo2_run(f, f_str, paso_fn, nombre, t0, x0, v0, tf, h):
+    print(f"\n--- EDO 2° orden — {nombre}  (v = x') ---")
+    print(f"x'' = {f_str}   =>   x' = v,   v' = {f_str}")
+    hdr = f"{'n':<5} {'t_n':<12} {'x_n':<14} {'v_n':<14} {'x_n+1':<14} {'v_n+1':<14}"
+    print("\n" + hdr + "\n" + "-" * len(hdr))
+    t, x, v = t0, x0, v0; paso = 0
+    while t < tf - 1e-14:
+        h_ef = min(h, tf - t)
+        try:
+            xn, vn = paso_fn(f, t, x, v, h_ef)
+        except Exception as e:
+            print(f"Error: {e}"); return
+        print(f"{paso:<5} {t:<12.6g} {x:<14.8g} {v:<14.8g} {xn:<14.8g} {vn:<14.8g}")
+        t = round(t + h_ef, 14); x, v = xn, vn; paso += 1
+    print(f"\nx(t={tf})  ≈ {x:.10g}")
+    print(f"x'(t={tf}) ≈ {v:.10g}")
+
+
+# ─── Comparación de los 4 métodos sobre la misma EDO escalar ──────────────────
+
+def comparacion_metodos_edo(f, x0, y0, xf, h):
+    print(f"\n=== COMPARACION — y({xf}) con h={h} ===")
+    resultados = []
+    for nombre, fn in [("Euler", metodo_euler), ("RK2 Punto Medio", metodo_rk2_pm),
+                        ("Heun", metodo_rk2_heun), ("RK4", metodo_rk4)]:
+        val = fn(f, x0, y0, xf, h)
+        resultados.append((nombre, val))
+    print(f"\n{'='*50}")
+    print(f"TABLA COMPARATIVA — y(x={xf})")
+    print(f"{'='*50}")
+    print(f"{'Metodo':<20} {'Resultado':<20}")
+    print("-" * 42)
+    for nombre, val in resultados:
+        s = f"{val:.10g}" if val is not None else "Error"
+        print(f"{nombre:<20} {s:<20}")
+
+
+# ─── Menu EDOs ────────────────────────────────────────────────────────────────
+
 def menu_odes():
     while True:
         print("\n=== ECUACIONES DIFERENCIALES ORDINARIAS (TEMA 5) ===\n")
-        print("  1. Metodo de Euler")
-        print("  2. RK2 Punto Medio")
-        print("  3. RK2 Heun  (Trapecio)")
-        print("  4. RK4  (Runge-Kutta orden 4)")
-        print("  0. Volver al menu principal")
+        print("  EDO escalar  y' = f(x, y):")
+        print("   1. Euler")
+        print("   2. RK2 Punto Medio")
+        print("   3. RK2 Heun  (Trapecio)")
+        print("   4. RK4  (Runge-Kutta orden 4)")
+        print()
+        print("  Sistema 2 EDOs  dx/dt=f1(t,x,y)  dy/dt=f2(t,x,y):")
+        print("   5. Euler")
+        print("   6. RK2 Punto Medio")
+        print("   7. Heun")
+        print("   8. RK4")
+        print()
+        print("  EDO 2° orden  x'' = f(t, x, x'):")
+        print("   9. Euler")
+        print("  10. RK2 Punto Medio")
+        print("  11. RK4")
+        print()
+        print("  12. Comparacion  Euler / RK2pm / Heun / RK4  (EDO escalar)")
+        print()
+        print("   0. Volver al menu principal")
         try:
-            op = input("\nElige [0-4]: ").strip()
+            op = input("\nElige [0-12]: ").strip()
         except (KeyboardInterrupt, EOFError):
             break
         if op == "0":
@@ -1890,18 +2605,49 @@ def menu_odes():
             op = int(op)
         except Exception:
             print("Opcion invalida"); continue
-        if op not in (1, 2, 3, 4):
+
+        if op in (1, 2, 3, 4, 12):
+            f, f_str = _pedir_ode()
+            if f is None: continue
+            ci = _pedir_ci()
+            if ci is None: continue
+            x0, y0, xf, h = ci
+            print(f"\ny' = {f_str},  y({x0}) = {y0},  x ∈ [{x0}, {xf}],  h = {h}")
+            if   op == 1:  metodo_euler(f, x0, y0, xf, h)
+            elif op == 2:  metodo_rk2_pm(f, x0, y0, xf, h)
+            elif op == 3:  metodo_rk2_heun(f, x0, y0, xf, h)
+            elif op == 4:  metodo_rk4(f, x0, y0, xf, h)
+            elif op == 12: comparacion_metodos_edo(f, x0, y0, xf, h)
+
+        elif op in (5, 6, 7, 8):
+            res = _pedir_sistema2()
+            if res[0] is None: continue
+            f1, f2, f1_str, f2_str = res
+            ci = _pedir_ci_sistema()
+            if ci is None: continue
+            t0, x0, y0, tf, h = ci
+            paso_map = {5: (_s2_euler_paso,  "Euler"),
+                        6: (_s2_rk2pm_paso,  "RK2 Punto Medio"),
+                        7: (_s2_heun_paso,   "Heun"),
+                        8: (_s2_rk4_paso,    "RK4")}
+            paso_fn, nombre = paso_map[op]
+            _sistema2_run(f1, f2, f1_str, f2_str, paso_fn, nombre, t0, x0, y0, tf, h)
+
+        elif op in (9, 10, 11):
+            f, f_str = _pedir_edo2()
+            if f is None: continue
+            ci = _pedir_ci_edo2()
+            if ci is None: continue
+            t0, x0, v0, tf, h = ci
+            print(f"\nx'' = {f_str},  x({t0})={x0}, x'({t0})={v0}, t∈[{t0},{tf}], h={h}")
+            paso_map = {9:  (_e2_euler_paso, "Euler"),
+                        10: (_e2_rk2pm_paso, "RK2 Punto Medio"),
+                        11: (_e2_rk4_paso,   "RK4")}
+            paso_fn, nombre = paso_map[op]
+            _edo2_run(f, f_str, paso_fn, nombre, t0, x0, v0, tf, h)
+
+        else:
             print("Opcion invalida"); continue
-        f, f_str = _pedir_ode()
-        if f is None: continue
-        ci = _pedir_ci()
-        if ci is None: continue
-        x0, y0, xf, h = ci
-        print(f"\ny' = {f_str},  y({x0}) = {y0},  x ∈ [{x0}, {xf}],  h = {h}")
-        if op == 1:   metodo_euler(f, x0, y0, xf, h)
-        elif op == 2: metodo_rk2_pm(f, x0, y0, xf, h)
-        elif op == 3: metodo_rk2_heun(f, x0, y0, xf, h)
-        elif op == 4: metodo_rk4(f, x0, y0, xf, h)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2132,5 +2878,8 @@ def main():
             print("Opcion invalida. Elige entre 0 y 5.")
 
 
+
+
 if __name__ == "__main__":
     main()
+
