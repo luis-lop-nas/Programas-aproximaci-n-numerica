@@ -8,6 +8,7 @@ Importar en cada main.py con:
                       buscar_cambios_de_signo, refinar_cambio
 """
 
+import ast
 import math
 import re
 
@@ -47,6 +48,78 @@ _ALLOWED_GLOBALS = {
     "e":     math.e,
 }
 
+_ALLOWED_EXPR_NODES = (
+    ast.Expression,
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.Call,
+    ast.Name,
+    ast.Load,
+    ast.Constant,
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.Pow,
+    ast.Mod,
+    ast.FloorDiv,
+    ast.UAdd,
+    ast.USub,
+)
+
+_ALLOWED_FUNC_NAMES = {
+    name for name, value in _ALLOWED_GLOBALS.items()
+    if name != "__builtins__" and callable(value)
+}
+_ALLOWED_CONST_NAMES = {
+    name for name, value in _ALLOWED_GLOBALS.items()
+    if name != "__builtins__" and not callable(value) and name != "math"
+}
+
+
+def _normalizar_expr(expr_str):
+    s = expr_str.strip().replace("^", "**").replace("ln(", "log(")
+    s = s.replace("math.pi", "pi").replace("math.e", "e")
+    return re.sub(r"\bmath\.", "", s)
+
+
+def _validar_ast_expr(tree, variables):
+    nombres = set(variables) | _ALLOWED_FUNC_NAMES | _ALLOWED_CONST_NAMES
+    for node in ast.walk(tree):
+        if not isinstance(node, _ALLOWED_EXPR_NODES):
+            raise ValueError(f"Expresion no permitida: {type(node).__name__}")
+        if isinstance(node, ast.Name) and node.id not in nombres:
+            raise ValueError(f"Nombre no permitido: {node.id}")
+        if isinstance(node, ast.Call):
+            if not isinstance(node.func, ast.Name) or node.func.id not in _ALLOWED_FUNC_NAMES:
+                raise ValueError("Solo se permiten llamadas a funciones matematicas conocidas.")
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
+                raise ValueError("Solo se permiten constantes numericas.")
+
+
+def crear_evaluador_seguro(expr_str, variables=("x",)):
+    """
+    Compila una expresion matematica segura y devuelve un evaluador.
+    Solo permite numeros, variables indicadas, operadores aritmeticos y funciones
+    matematicas incluidas en _ALLOWED_GLOBALS.
+    """
+    expr = _normalizar_expr(expr_str)
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError as e:
+        raise ValueError(f"Expresion invalida: {e.msg}") from e
+    _validar_ast_expr(tree, variables)
+    code = compile(tree, "<expr-matematica>", "eval")
+
+    def evaluar(**valores):
+        faltan = [v for v in variables if v not in valores]
+        if faltan:
+            raise ValueError(f"Faltan variables: {', '.join(faltan)}")
+        return eval(code, _ALLOWED_GLOBALS, valores)
+
+    return evaluar
+
 # Texto de ayuda con todas las funciones disponibles (se muestra al usuario)
 AYUDA_FUNCIONES = (
     "Funciones disponibles:\n"
@@ -65,15 +138,10 @@ def crear_funcion_segura(f_str):
     Sustituye ^ por ** y ln( por log( para compatibilidad.
     Evalua en un entorno restringido que solo permite las funciones matematicas de _ALLOWED_GLOBALS.
     """
-    expr = (
-        f_str.strip()
-        .replace("^", "**")
-        .replace("ln(", "log(")      # ln -> log (ambos son logaritmo natural aqui)
-        .replace("math.log(", "log(")  # por si el usuario escribe math.log directamente
-    )
+    evaluar = crear_evaluador_seguro(f_str, ("x",))
 
     def f(x):
-        return eval(expr, _ALLOWED_GLOBALS, {"x": x})
+        return evaluar(x=x)
 
     return f
 

@@ -564,7 +564,8 @@ check("S2-RK4 ∫cos(t) con h=0.01", y, math.sin(1), 1e-7)
 # Biseccion detecta sin cambio de signo → None
 try:
     res = silent(main._biseccion_core, f_r, 2.0, 3.0, 1e-6, 100)
-    if res is None:
+    raiz = res[0] if isinstance(res, (tuple, list)) else res
+    if raiz is None:
         PASS+=1; print("  OK    Biseccion sin cambio signo → None")
     else:
         FAIL+=1; ERRORS.append("FAIL: biseccion debería dar None en [2,3]")
